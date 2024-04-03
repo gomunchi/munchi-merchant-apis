@@ -1,4 +1,5 @@
 import { Exclude, Expose, Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export interface OrderingProductCategory {
   id: number;
@@ -25,6 +26,12 @@ export interface OrderingCategoryExtraOptionSubOption {
   preselected: boolean;
 }
 
+export class MenuQuery {
+  @IsString()
+  @IsNotEmpty()
+  businessPublicId: string;
+}
+
 @Exclude()
 export class MenuCategoryDto {
   @Expose()
@@ -32,6 +39,9 @@ export class MenuCategoryDto {
 
   @Expose()
   name: string;
+
+  @Expose()
+  enabled: boolean;
 
   @Expose()
   @Type(() => MenuProductDto)
