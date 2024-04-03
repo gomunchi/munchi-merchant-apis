@@ -10,6 +10,7 @@ import { ProviderEnum } from 'src/provider/provider.type';
 import { mapToDate } from './utils/getTimeRange';
 import { WoltOrderPrismaSelectArgs } from 'src/provider/wolt/dto/wolt-order.dto';
 import { HistoryFilterQuery, HistoryQuery } from './dto/history,dto';
+import { OrderingPaymentEnum } from 'src/provider/ordering/dto/ordering-order.dto';
 
 @Injectable()
 export class HistoryService {
@@ -25,7 +26,6 @@ export class HistoryService {
     { date, page, rowPerPage }: HistoryQuery,
     filterQuery?: HistoryFilterQuery,
   ) {
-
     const sessionArgs = {
       include: {
         businesses: true,
@@ -68,10 +68,10 @@ export class HistoryService {
         OR: filterQuery.payMethod
           ? [
               ...(filterQuery.payMethod.includes(PayMethodEnum.Cash)
-                ? [{ payMethodId: { in: [1] } }]
+                ? [{ payMethodId: { in: [OrderingPaymentEnum.Cash] } }]
                 : []),
               ...(filterQuery.payMethod.includes(PayMethodEnum.Card)
-                ? [{ payMethodId: { not: 1 } }, { payMethodId: null }] // Includes null and values not 1
+                ? [{ payMethodId: { not: OrderingPaymentEnum.Cash } }, { payMethodId: null }] // Includes null and values not 1
                 : []),
             ]
           : undefined,

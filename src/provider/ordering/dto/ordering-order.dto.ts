@@ -166,3 +166,7 @@ export interface OrderingOrder extends Order {
   history: any;
   spot_number: number | null;
 }
+
+export enum OrderingPaymentEnum {
+  Cash = 1,
+}
