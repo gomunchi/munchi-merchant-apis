@@ -3,7 +3,7 @@ import { Business, Prisma, Provider } from '@prisma/client';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from 'src/business/business.service';
 import { FinancialAnalyticsService } from 'src/financial-analytics/financial-analytics.service';
-import { OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
+import { OrderResponse, OrderStatusEnum, PayMethodEnum } from 'src/order/dto/order.dto';
 import { OrderService } from 'src/order/order.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 
@@ -25,6 +25,7 @@ export class HistoryService {
     { date, page, rowPerPage }: HistoryQuery,
     filterQuery?: HistoryFilterQuery,
   ) {
+
     const sessionArgs = {
       include: {
         businesses: true,
@@ -60,17 +61,20 @@ export class HistoryService {
             ? filterQuery.provider
             : [ProviderEnum.Munchi, ProviderEnum.Wolt],
         },
-        payMethodId: {
-          in: filterQuery.payMethod
-            ? filterQuery?.payMethod.map((e: any) => {
-                return e === 'Cash' ? 1 : e; // Return 1 for 'Cash', otherwise the original value
-              })
-            : undefined,
-        },
         createdAt: {
           gte: startDate,
           lte: endDate,
         },
+        OR: filterQuery.payMethod
+          ? [
+              ...(filterQuery.payMethod.includes(PayMethodEnum.Cash)
+                ? [{ payMethodId: { in: [1] } }]
+                : []),
+              ...(filterQuery.payMethod.includes(PayMethodEnum.Card)
+                ? [{ payMethodId: { not: 1 } }, { payMethodId: null }] // Includes null and values not 1
+                : []),
+            ]
+          : undefined,
       },
       include: WoltOrderPrismaSelectArgs,
       orderBy: {
