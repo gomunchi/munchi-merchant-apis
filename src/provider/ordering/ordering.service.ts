@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { plainToInstance } from 'class-transformer';
 import { Business } from 'ordering-api-sdk';
@@ -7,14 +8,13 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthCredentials, OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { ProviderService } from '../provider.service';
+import { WoltMenuData } from '../wolt/dto/wolt-menu.dto';
+import { WoltService } from '../wolt/wolt.service';
+import { OrderingMenuCategory } from './dto/ordering-menu.dto';
+import { OrderingOrder } from './dto/ordering-order.dto';
 import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
 import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
-import { OrderingOrder } from './dto/ordering-order.dto';
-import { WoltService } from '../wolt/wolt.service';
-import { WoltMenuData } from '../wolt/dto/wolt-menu.dto';
-import { ConfigService } from '@nestjs/config';
-import { OrderingMenuCategory } from './dto/ordering-menu.dto';
 
 @Injectable()
 export class OrderingService implements ProviderService {
@@ -737,6 +737,30 @@ export class OrderingService implements ProviderService {
       },
     };
 
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+    }
+  }
+
+  async getUnavailableMenuCategory(
+    orderingAccessToken: string,
+    orderingBusinessId: string,
+  ): Promise<OrderingMenuCategory[]> {
+    const options = {
+      method: 'GET',
+      url: this.utilService.getEnvUrl(
+        'business',
+        `${orderingBusinessId}/categories?where={"enabled":false}`,
+      ),
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${orderingAccessToken}`,
+      },
+    };
+    
     try {
       const response = await axios.request(options);
       return response.data.result;

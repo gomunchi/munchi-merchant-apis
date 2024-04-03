@@ -238,6 +238,25 @@ export class MenuService {
     return mappedCategoryData;
   }
 
+  async getUnavailableBusinessProduct(
+    orderingUserId: number,
+    publicBusinessId: string,
+  ) {
+    // Get access token
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
+
+    const categoryData = await this.orderingService.getUnavailableMenuCategory(
+      orderingAccessToken,
+      business.orderingBusinessId,
+    );
+    //Format category data to product data
+    const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
+
+    return mappedCategoryData;
+  }
+
   async deleteAllCategory(orderingUserId: number, publicBusinessId: string) {
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
