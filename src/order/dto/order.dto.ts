@@ -143,10 +143,12 @@ export enum OrderStatusEnum {
 }
 
 export enum PayMethodEnum {
-  Cash = 1,
+  Cash = 'Cash',
+  // Card for all other values that different than 1, including null
+  Card = 'Card',
 }
 
-export type AvailablePayMethod = PayMethodEnum.Cash;
+export type AvailablePayMethod = PayMethodEnum.Cash | PayMethodEnum.Card;
 
 export type AvailableOrderStatus =
   | OrderStatusEnum.PENDING
