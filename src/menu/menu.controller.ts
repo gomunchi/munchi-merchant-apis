@@ -1,7 +1,17 @@
-import { Controller, Delete, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { MenuService } from './menu.service';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { Response } from 'express';
+import { MenuQuery } from './dto/menu.dto';
 
 @Controller('menu')
 export class MenuController {
@@ -11,6 +21,7 @@ export class MenuController {
   @Get('category')
   getMenuCategory(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
     const { orderingUserId } = request.user;
+
     return this.menuService.getMenuCategory(orderingUserId, businessPublicId);
   }
 
@@ -18,14 +29,30 @@ export class MenuController {
   @Get('category/wolt')
   getWoltMenuCategory(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
     const { orderingUserId } = request.user;
+
     return this.menuService.getWoltMenuCategory(orderingUserId, businessPublicId);
   }
 
   @UseGuards(JwtGuard)
   @Get('product')
-  getBusinessProduct(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
+  getBusinessProduct(@Req() request: any, @Query(new ValidationPipe()) menuQuery: MenuQuery) {
     const { orderingUserId } = request.user;
-    return this.menuService.getBusinessProduct(orderingUserId, businessPublicId);
+
+    return this.menuService.getBusinessProduct(orderingUserId, menuQuery.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('product/unavailable')
+  getUnavailableBusinessProduct(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: MenuQuery,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getUnavailableBusinessProduct(
+      orderingUserId,
+      menuQuery.businessPublicId,
+    );
   }
 
   @UseGuards(JwtGuard)
@@ -40,5 +67,4 @@ export class MenuController {
 
     response.status(200).send('Success');
   }
-
 }
