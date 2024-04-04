@@ -42,6 +42,14 @@ export class MenuController {
   }
 
   @UseGuards(JwtGuard)
+  @Get('option')
+  getBusinessProductOption(@Req() request: any, @Query(new ValidationPipe()) menuQuery: MenuQuery) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getBusinessProductOption(orderingUserId, menuQuery.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
   @Get('product/unavailable')
   getUnavailableBusinessProduct(
     @Req() request: any,

@@ -9,7 +9,7 @@ import { ProviderEnum } from 'src/provider/provider.type';
 import { MenuData, WoltCategory, WoltMenuData } from 'src/provider/wolt/dto/wolt-menu.dto';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { UtilsService } from 'src/utils/utils.service';
-import { MenuCategoryDto } from './dto/menu.dto';
+import { MenuCategoryDto, MenuProductDto, MenuProductOptionDto } from './dto/menu.dto';
 import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
 
 @Injectable()
@@ -238,23 +238,42 @@ export class MenuService {
     return mappedCategoryData;
   }
 
-  async getUnavailableBusinessProduct(
-    orderingUserId: number,
-    publicBusinessId: string,
-  ) {
+  async getUnavailableBusinessProduct(orderingUserId: number, publicBusinessId: string) {
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
-    const categoryData = await this.orderingService.getUnavailableMenuCategory(
+    const categoryData = await this.orderingService.getMenuCategory(
       orderingAccessToken,
       business.orderingBusinessId,
     );
+
+    const disabledProducts = categoryData.flatMap((category) =>
+      category.products.filter((product) => !product.enabled),
+    );
+
     //Format category data to product data
-    const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
+    const mappedCategoryData = plainToInstance(MenuProductDto, disabledProducts);
 
     return mappedCategoryData;
+  }
+
+  async getBusinessProductOption(orderingUserId: number, publicBusinessId: string) {
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
+
+    const extrasData = await this.orderingService.getProductExtras(
+      orderingAccessToken,
+      business.orderingBusinessId,
+    );
+
+    const optionsData = extrasData.flatMap((extra) => extra.options);
+
+    const mappedOPtionData = plainToInstance(MenuProductOptionDto, optionsData);
+
+    return mappedOPtionData;
   }
 
   async deleteAllCategory(orderingUserId: number, publicBusinessId: string) {
