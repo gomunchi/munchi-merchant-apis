@@ -64,4 +64,41 @@ export class MenuProductDto {
 
   @Expose()
   enabled: boolean;
+
+  @Expose({ name: 'category_id' })
+  categoryId: number;
+}
+
+@Exclude()
+export class MenuProductOptionDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  enabled: boolean;
+
+  @Expose({ name: 'extra_id' })
+  extraId: number;
+
+  @Expose()
+  @Type(() => MenuProductOptionSuboptionDto)
+  suboptions: MenuProductOptionSuboptionDto[];
+}
+
+@Exclude()
+export class MenuProductOptionSuboptionDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  enabled: boolean;
+
+  @Expose({ name: 'extra_option_id' })
+  extraOptionId: number;
 }
