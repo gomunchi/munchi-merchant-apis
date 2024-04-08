@@ -9,7 +9,12 @@ import { ProviderEnum } from 'src/provider/provider.type';
 import { MenuData, WoltCategory, WoltMenuData } from 'src/provider/wolt/dto/wolt-menu.dto';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { UtilsService } from 'src/utils/utils.service';
-import { MenuCategoryDto, MenuProductDto, MenuProductOptionDto } from './dto/menu.dto';
+import {
+  MenuCategoryDto,
+  MenuProductDto,
+  MenuProductOptionDto,
+  ValidatedProductBody,
+} from './dto/menu.dto';
 import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
 
 @Injectable()
@@ -170,7 +175,9 @@ export class MenuService {
               orderingBusinessId,
               newCategoryId,
               newProductId,
-              `[${extrasParentObj.id}]`,
+              {
+                extras: `[${extrasParentObj.id}]`,
+              },
             );
           }
 
@@ -307,5 +314,61 @@ export class MenuService {
         category.id.toString(),
       );
     });
+  }
+
+  async setBusinessProductStatus(
+    orderingUserId: number,
+    bodyData: ValidatedProductBody,
+    categoryId: string,
+    productId: string,
+  ) {
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.publicBusinessId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    const data = {
+      enabled: bodyData.enabled,
+    };
+
+    await this.orderingService.editProduct(
+      orderingAccessToken,
+      orderingBusinessId,
+      categoryId,
+      productId,
+      data,
+    );
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async setBusinessCategoryStatus(
+    orderingUserId: number,
+    bodyData: ValidatedProductBody,
+    categoryId: string,
+  ) {
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.publicBusinessId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    const data = {
+      enabled: bodyData.enabled,
+    };
+
+    await this.orderingService.editCategory(
+      orderingAccessToken,
+      orderingBusinessId,
+      categoryId,
+      data,
+    );
+
+    return {
+      message: 'Success',
+    };
   }
 }

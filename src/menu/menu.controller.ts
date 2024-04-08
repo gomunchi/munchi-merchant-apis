@@ -1,17 +1,23 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
+  Param,
+  Put,
   Query,
   Req,
   Res,
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
-import { MenuService } from './menu.service';
-import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { Response } from 'express';
-import { MenuQuery } from './dto/menu.dto';
+import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import {
+  MenuQuery,
+  ValidatedProductBody
+} from './dto/menu.dto';
+import { MenuService } from './menu.service';
 
 @Controller('menu')
 export class MenuController {
@@ -61,6 +67,38 @@ export class MenuController {
       orderingUserId,
       menuQuery.businessPublicId,
     );
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('category/:categoryId/product/:productId')
+  putBusinessProduct(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedProductBody,
+    @Param('categoryId') categoryId: string,
+    @Param('productId') productId: string,
+  ) {
+
+    const { orderingUserId } = request.user;
+
+    return this.menuService.setBusinessProductStatus(
+      orderingUserId,
+      bodyData,
+      categoryId,
+      productId,
+    );
+  }
+
+  @UseGuards(JwtGuard)
+  @Put('category/:categoryId')
+  putBusinessCategory(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedProductBody,
+    @Param('categoryId') categoryId: string,
+  ) {
+    
+    const { orderingUserId } = request.user;
+
+    return this.menuService.setBusinessCategoryStatus(orderingUserId, bodyData, categoryId);
   }
 
   @UseGuards(JwtGuard)
