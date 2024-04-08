@@ -32,6 +32,31 @@ export class MenuQuery {
   businessPublicId: string;
 }
 
+export class ValidatedProductBody {
+  @IsString()
+  @IsNotEmpty()
+  publicBusinessId: string;
+
+  @IsNotEmpty()
+  enabled: boolean;
+
+  @IsString()
+  @IsOptional()
+  reminderTime: string;
+}
+
+export class ValidatedProductId {
+  @IsString()
+  @IsNotEmpty()
+  productId: string;
+}
+
+export class ValidatedCategoryId {
+  @IsString()
+  @IsNotEmpty()
+  categoryId: string;
+}
+
 @Exclude()
 export class MenuCategoryDto {
   @Expose()
