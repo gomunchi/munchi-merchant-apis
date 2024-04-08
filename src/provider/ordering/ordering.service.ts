@@ -567,6 +567,30 @@ export class OrderingService implements ProviderService {
     }
   }
 
+  async editCategory(
+    orderingAccessToken: string,
+    orderingBusinessId: string,
+    categoryId: string,
+    data: Object,
+  ) {
+    const options = {
+      method: 'POST',
+      url: this.utilService.getEnvUrl('business', `${orderingBusinessId}/categories/${categoryId}`),
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${orderingAccessToken}`,
+      },
+      data: data,
+    };
+
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+    }
+  }
+
   async createProductsExtraField(orderingAccessToken: string, orderingBusinessId: string) {
     const options = {
       method: 'POST',
@@ -624,7 +648,7 @@ export class OrderingService implements ProviderService {
     orderingBusinessId: string,
     categoryId: string,
     productId: string,
-    data: any,
+    data: Object,
   ) {
     const options = {
       method: 'POST',
@@ -636,9 +660,7 @@ export class OrderingService implements ProviderService {
         accept: 'application/json',
         Authorization: `Bearer ${orderingAccessToken}`,
       },
-      data: {
-        extras: data,
-      },
+      data: data,
     };
 
     try {
@@ -760,7 +782,7 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${orderingAccessToken}`,
       },
     };
-    
+
     try {
       const response = await axios.request(options);
       return response.data.result;
