@@ -507,7 +507,6 @@ export class OrderingService implements ProviderService {
 
       return response.data;
     } catch (error: any) {
-      // await this.syncWoltBusiness(woltOrderId);
       throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
