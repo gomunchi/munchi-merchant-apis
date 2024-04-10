@@ -1,12 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { BusinessService } from 'src/business/business.service';
 import { OrderingMenuCategory } from 'src/provider/ordering/dto/ordering-menu.dto';
 import { OrderingMenuMapperService } from 'src/provider/ordering/ordering-menu-mapper';
 import { OrderingService } from 'src/provider/ordering/ordering.service';
+import { ProviderManagmentService } from 'src/provider/provider-management.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 import { MenuData, WoltCategory, WoltMenuData } from 'src/provider/wolt/dto/wolt-menu.dto';
+import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { UtilsService } from 'src/utils/utils.service';
 import {
@@ -15,7 +17,6 @@ import {
   MenuProductOptionDto,
   ValidatedProductBody,
 } from './dto/menu.dto';
-import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
 
 @Injectable()
 export class MenuService {
@@ -25,6 +26,7 @@ export class MenuService {
     private woltMenuMapperService: WoltMenuMapperService,
     private businessService: BusinessService,
     private woltService: WoltService,
+    private providerMangementService: ProviderManagmentService,
     private utilService: UtilsService,
   ) {}
   async getMenuCategory(orderingUserId: number, publicBusinessId: string) {
@@ -43,7 +45,7 @@ export class MenuService {
       business.orderingBusinessId,
     );
 
-    //Map to wolt object and remove propertyn that has no product out of the result object
+    //Map to wolt object and remove property that has no product out of the result object
     const result: WoltCategory[] = menu
       .map((orderingCategory: OrderingMenuCategory) => {
         if (orderingCategory.products.length === 0) {
@@ -61,7 +63,7 @@ export class MenuService {
     };
 
     //Sync order to Wolt
-    await this.orderingService.syncMenu(woltVenue[0].providerId, orderingUserId, woltMenuData);
+    await this.woltService.createMenu(woltVenue[0].providerId, orderingUserId, woltMenuData);
 
     return woltMenuData;
   }
@@ -74,6 +76,10 @@ export class MenuService {
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
     const orderingBusinessId = business.orderingBusinessId;
+
+    if (!business.provider || business.provider.length === 0) {
+      throw new NotFoundException('No provider associate with this business');
+    }
 
     // Get wolt Venue
     const woltVenue = business.provider.filter(
@@ -242,6 +248,16 @@ export class MenuService {
     //Format category data to product data
     const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
 
+    // Sync menu data from ordering to Wolt to have the same product id
+
+    if (business.provider.length > 0) {
+      await this.providerMangementService.syncProviderMenu(
+        business.provider,
+        orderingUserId,
+        categoryData,
+      );
+    }
+
     return mappedCategoryData;
   }
 
@@ -339,6 +355,16 @@ export class MenuService {
       productId,
       data,
     );
+
+    // Edit the product on other providers
+    if (business.provider.length > 0) {
+      await this.providerMangementService.editProduct(
+        business.provider,
+        productId,
+        orderingUserId,
+        bodyData,
+      );
+    }
 
     return {
       message: 'Success',
