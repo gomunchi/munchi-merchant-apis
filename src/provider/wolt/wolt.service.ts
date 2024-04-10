@@ -16,10 +16,22 @@ import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { ProviderService } from '../provider.service';
 import { ProviderEnum } from '../provider.type';
 import { WoltOrderV2 } from './dto/wolt-order-v2.dto';
-import { WoltOrder, WoltOrderPrismaSelectArgs, WoltOrderType } from './dto/wolt-order.dto';
+import {
+  WoltCategory,
+  WoltOrder,
+  WoltOrderPrismaSelectArgs,
+  WoltOrderType,
+} from './dto/wolt-order.dto';
+
+import { WoltCategory as WoltMenuCategory } from './dto/wolt-menu.dto';
+
 import { WoltOrderMapperService } from './wolt-order-mapper';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltSyncService } from './wolt-sync';
+import { WoltMenuData } from './dto/wolt-menu.dto';
+import { OrderingMenuCategory } from '../ordering/dto/ordering-menu.dto';
+import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
+import { MenuItemBodyData } from './wolt.type';
 
 @Injectable()
 export class WoltService implements ProviderService {
@@ -33,6 +45,7 @@ export class WoltService implements ProviderService {
     private woltOrderMapperService: WoltOrderMapperService,
     private woltRepositoryService: WoltRepositoryService,
     private woltSyncService: WoltSyncService,
+    private orderingMenuMapperService: OrderingMenuMapperService,
   ) {
     this.woltApiUrl = this.configService.get('WOLT_API_URL');
   }
@@ -119,7 +132,7 @@ export class WoltService implements ProviderService {
     const providerCredentialsId = provider.business.owners.filter(
       (owner) => owner.providerCredentialsId,
     );
-   
+
     const providerCredentials = await this.prismaService.providerCredential.findUnique({
       where: {
         id: providerCredentialsId[0].providerCredentialsId,
@@ -445,24 +458,104 @@ export class WoltService implements ProviderService {
     }
   }
 
-  async syncMenu(orderingUserId: number, orderingBusinessId: string, orderingMenuData: any) {
-    const orderingAccessToken = await this.utilsService.getOrderingAccessToken(orderingUserId);
-
-    const options = {
-      method: 'POST',
-      url: this.utilsService.getEnvUrl('business', `${orderingBusinessId}/categories`),
-      headers: {
-        accept: 'application/json',
-        Authorization: `Bearer ${orderingAccessToken}`,
-      },
-    };
+  async editMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
+    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
 
     try {
-      const response = await axios.request(options);
-      return response.data.result;
-    } catch (error) {
-      this.utilsService.logError(error);
+      const response = await axios.post(
+        `${this.woltApiUrl}/v1/restaurants/${woltVenueId}/menu`,
+        woltMenuData,
+        {
+          auth: {
+            username: woltCredentials.username,
+            password: woltCredentials.password,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error: any) {
+      throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
+  }
+
+  async editProduct(
+    woltVenueId: string,
+    externalProductId: string,
+    orderingUserId: number,
+    bodyData: any,
+  ) {
+    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+
+    try {
+      const response = await axios.post(
+        `${this.woltApiUrl}/venues/${woltVenueId}/items`,
+        [
+          {
+            external_id: externalProductId,
+            enabled: bodyData.enabled,
+          },
+        ],
+        {
+          auth: {
+            username: woltCredentials.username,
+            password: woltCredentials.password,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.log(error.response ? error.response.data : error.message);
+      throw new ForbiddenException(error.response ? error.response.data : error.message);
+    }
+  }
+
+  async createMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
+    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+
+    try {
+      const response = await axios.post(
+        `${this.woltApiUrl}/v1/restaurants/${woltVenueId}/menu`,
+        woltMenuData,
+        {
+          auth: {
+            username: woltCredentials.username,
+            password: woltCredentials.password,
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error: any) {
+      throw new ForbiddenException(error.response ? error.response.data : error.message);
+    }
+  }
+
+  async syncMenu(
+    woltVenueId: string,
+    orderingUserId: number,
+    orderingMenuData: OrderingMenuCategory[],
+  ) {
+    console.log('Syncing menu');
+
+    const result: WoltMenuCategory[] = orderingMenuData
+      .map((orderingCategory: OrderingMenuCategory) => {
+        if (orderingCategory.products.length === 0) {
+          return undefined; // Returns undefined
+        }
+        return this.orderingMenuMapperService.mapToWoltCategory(orderingCategory);
+      })
+      .filter(Boolean);
+
+    const woltMenuData: WoltMenuData = {
+      id: this.utilsService.generatePublicId(),
+      currency: 'EUR',
+      primary_language: 'en',
+      categories: result,
+    };
+
+    await this.createMenu(woltVenueId, orderingUserId, woltMenuData);
   }
 
   generateWoltUpdateEndPoint(orderStatus: AvailableOrderStatus, woltOrderFromDb: OrderResponse) {
