@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { Prisma, Provider } from '@prisma/client';
 import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus } from '../order/dto/order.dto';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
@@ -11,6 +11,7 @@ import { AvailableProvider, ProviderEnum } from './provider.type';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
 import { OrderingOrder } from './ordering/dto/ordering-order.dto';
+import { OrderingMenuCategory } from './ordering/dto/ordering-menu.dto';
 
 @Injectable()
 export class ProviderManagmentService {
@@ -119,6 +120,37 @@ export class ProviderManagmentService {
     return this.moduleRef
       .get(`${provider}Service`)
       .rejectOrder(orderingUserId, orderId, orderRejectData);
+  }
+
+  async syncProviderMenu(
+    providers: Provider[],
+    orderingUserId: number,
+    orderingMenuData: OrderingMenuCategory[],
+  ) {
+    // This will sync other provider menu except Ordering
+    if (providers.length > 0) {
+      providers.forEach((provider) => {
+        return this.moduleRef
+          .get(`${provider.name}Service`)
+          .syncMenu(provider.providerId, orderingUserId, orderingMenuData);
+      });
+    }
+  }
+
+  async editProduct(
+    providers: Provider[],
+    externalProductId: string,
+    orderingUserId: number,
+    data: Object,
+  ) {
+    // Need a service to transform the body data to data that fit with specific provider
+    // This will sync other provider menu except Ordering
+
+    providers.forEach((provider) => {
+      return this.moduleRef
+        .get(`${provider.name}Service`)
+        .editProduct(provider.providerId, externalProductId, orderingUserId, data);
+    });
   }
 
   async validateProvider(providers: string[] | string): Promise<boolean> {
