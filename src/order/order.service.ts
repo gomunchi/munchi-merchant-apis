@@ -1,133 +1,132 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { plainToClass } from 'class-transformer';
-import { OrderingIoService } from 'src/ordering.io/ordering.io.service';
-import { UtilsService } from 'src/utils/utils.service';
-import { OrderDto } from './dto/order.dto';
-import { BusinessService } from 'src/business/business.service';
-import { OrderData } from 'src/type';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { SessionService } from 'src/auth/session.service';
+import { BusinessService } from 'src/business/business.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { ProviderManagmentService } from 'src/provider/provider-management.service';
+import { OrderData } from 'src/type';
+import { UtilsService } from 'src/utils/utils.service';
+import { AvailableOrderStatus, OrderStatusEnum } from './dto/order.dto';
+import { OrderRejectData } from './validation/order.validation';
 
 @Injectable()
 export class OrderService {
   constructor(
-    private readonly orderingIo: OrderingIoService,
+    private readonly providerManagementService: ProviderManagmentService,
     private readonly utils: UtilsService,
-    private readonly business: BusinessService,
-    private readonly sessionService: SessionService,
+    private readonly businessService: BusinessService,
+    private readonly prismaService: PrismaService,
   ) {}
 
-  async getFilteredOrdersForSession(
-    sessionPublicId: string,
-    query: string,
-    paramsQuery: string[],
-    businessPublicId?: string[],
+  async getOrderByStatus(
+    orderingUserId: number,
+    queryData: {
+      providers: string[];
+      status: AvailableOrderStatus[];
+      businessPublicIds: string[];
+    },
   ) {
-    // TODO: Create general type instead of create seperately
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
-      select: {
-        id: true,
-        refreshToken: true,
-        deviceId: true,
-        businesses: {
-          select: {
-            id: true,
-            publicId: true,
-            orderingBusinessId: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            orderingUserId: true,
-            publicId: true,
-            email: true,
-            businesses: true,
-            orderingAccessToken: true,
-          },
-        },
+    const validProvider = await this.providerManagementService.validateProvider(
+      queryData.providers,
+    );
+    const validateStatus = await this.validateOrderStatus(queryData.status);
+    // If not enough data or data passed in wrong we return error
+    if (!validProvider) {
+      throw new NotFoundException('Provider not found');
+    } else if (!validateStatus) {
+      throw new NotFoundException('Status not found');
+    }
+
+    const businesses = await this.businessService.findManyBusinessesByPublicId(
+      queryData.businessPublicIds,
+    );
+
+    //Format business data to array of business ordering ids
+    const businessIds = businesses.map((b) => b.orderingBusinessId);
+
+    const accessToken = await this.utils.getOrderingAccessToken(orderingUserId);
+
+    // Get order by filtering provider, status and businessIds
+    const order = await this.providerManagementService.getOrderByStatus(
+      queryData.providers,
+      queryData.status,
+      businessIds,
+      {
+        orderingToken: accessToken,
       },
-    });
+    );
+    return order;
+  }
 
-    const session = await this.sessionService.getSessionByPublicId<
-      Prisma.SessionGetPayload<typeof findSessionArgs>
-    >(sessionPublicId, findSessionArgs);
+  async getOrderbyId(orderingUserId: number, orderId: string) {
+    try {
+      return await this.providerManagementService.getOrderById(orderId, orderingUserId);
+    } catch (error) {
+      this.utils.logError(error);
+    }
+  }
 
-    if (!session) {
-      throw new NotFoundException('Cannot find session by public Id');
+  async updateOrder(orderingUserId: number, orderId: string, orderData: OrderData) {
+    if (!orderData || Object.values(orderData).some((value) => value === null)) {
+      throw new NotFoundException('Not enough data');
     }
 
-    // TODO: Need to take from controller, now hardcode to use from session
-    const businessIds = session.businesses.map((business) => business.orderingBusinessId);
-    const { user } = session;
+    const validProvider = await this.providerManagementService.validateProvider(orderData.provider);
+
+    if (!validProvider) {
+      throw new NotFoundException('No provider found');
+    }
 
     try {
-      const response = await this.orderingIo.getOrderForBusinesses(
-        user.orderingAccessToken,
-        businessIds,
-        query,
-        paramsQuery,
+      //Update order base on provider
+      const order = await this.providerManagementService.updateOrder(
+        orderData.provider,
+        orderingUserId,
+        orderId,
+        {
+          orderStatus: orderData.orderStatus,
+          preparedIn: orderData.preparedIn,
+        },
       );
 
-      return plainToClass(OrderDto, response);
+      return order;
     } catch (error) {
       this.utils.logError(error);
     }
   }
 
-  // TODO: Need to refactor later
-  async getFilteredOrdersForBusiness(
-    userId: number,
-    query: string,
-    paramsQuery: string[],
-    publicBusinessId: string,
-  ) {
-    const accessToken = await this.utils.getOrderingAccessToken(userId);
-    const business = await this.business.findBusinessByPublicId(publicBusinessId);
-
-    if (!business) {
-      throw new ForbiddenException('Something wrong happened');
-    }
+  async rejectOrder(orderingUserId: number, orderId: string, orderRejectData: OrderRejectData) {
     try {
-      const response = await this.orderingIo.getFilteredOrders(
-        accessToken,
-        business.orderingBusinessId,
-        query,
-        paramsQuery,
+      return await this.providerManagementService.rejectOrder(
+        orderRejectData.provider,
+        orderId,
+        orderingUserId,
+        {
+          reason: orderRejectData.reason,
+        },
       );
-      return plainToClass(OrderDto, response);
     } catch (error) {
       this.utils.logError(error);
     }
   }
 
-  async getOrderbyId(userId: number, orderId: number) {
-    const accessToken = await this.utils.getOrderingAccessToken(userId);
-    try {
-      const response = await this.orderingIo.getOrderbyId(accessToken, orderId);
-      return plainToClass(OrderDto, response);
-    } catch (error) {
-      this.utils.logError(error);
-    }
+  async validateOrderStatus(orderStatus: AvailableOrderStatus[]) {
+    const orderStatusArray: string[] = Object.values(OrderStatusEnum);
+
+    return orderStatus.every((element) => orderStatusArray.includes(element));
   }
 
-  async updateOrder(userId: number, orderId: number, orderData: OrderData) {
-    const accessToken = await this.utils.getOrderingAccessToken(userId);
-    try {
-      const response = await this.orderingIo.updateOrder(accessToken, orderId, orderData);
-      return plainToClass(OrderDto, response);
-    } catch (error) {
-      this.utils.logError(error);
-    }
+  async getManyOrderByArgs(orderArgs: Prisma.OrderFindManyArgs) {
+    const order = await this.prismaService.order.findMany(orderArgs);
+
+    return order as any[];
   }
 
-  async deleteOrder(userId: number, orderId: number) {
-    const accessToken = await this.utils.getOrderingAccessToken(userId);
-    try {
-      const response = await this.orderingIo.deleteOrder(accessToken, orderId);
-      return response;
-    } catch (error) {
-      this.utils.logError(error);
-    }
+  async countTotalOrderByArgs(orderArgs: Prisma.OrderFindManyArgs) {
+    // Remove properties not needed for counting
+    const orderCountArgs: Prisma.OrderCountArgs = {
+      where: orderArgs.where,
+    };
+
+    return await this.prismaService.order.count(orderCountArgs);
   }
 }

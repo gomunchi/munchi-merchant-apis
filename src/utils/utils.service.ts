@@ -1,12 +1,11 @@
 /* eslint-disable prettier/prettier */
-import { ForbiddenException, Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import Cryptr from 'cryptr';
 import moment from 'moment';
 import { SessionService } from 'src/auth/session.service';
-import { OrderingIoService } from 'src/ordering.io/ordering.io.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { UserService } from 'src/user/user.service';
 import { v4 as uuidv4 } from 'uuid';
 @Injectable()
@@ -16,10 +15,9 @@ export class UtilsService {
   constructor(
     @Inject(forwardRef(() => SessionService)) private readonly sessionService: SessionService,
     @Inject(forwardRef(() => UserService)) private readonly userService: UserService,
-    @Inject(forwardRef(() => OrderingIoService)) private readonly orderingIoService: OrderingIoService,
-    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
     private config: ConfigService,
-  ) { }
+  ) {}
 
   // TODO: Need to change the name, seem it now only work for ordering co service
   getEnvUrl(path: string, idParam?: string | number, queryParams?: Array<string>): string {
@@ -31,21 +29,23 @@ export class UtilsService {
 
   /**
    * Get access token from user table
-   * 
-   * @param publicUserId 
-   * @returns 
+   *
+   * @param publicUserId
+   * @returns
    */
   async getOrderingAccessToken(orderingUserId: number) {
-
     const selectArg = Prisma.validator<Prisma.UserSelect>()({
-        hash: true,
-        orderingAccessTokenExpiredAt: true,
-        orderingAccessToken: true,
-        email: true,
-        orderingUserId: true,
-    })
+      hash: true,
+      orderingAccessTokenExpiredAt: true,
+      orderingAccessToken: true,
+      email: true,
+      orderingUserId: true,
+    });
 
-    let user = await this.userService.getUserByOrderingUserId<typeof selectArg>(orderingUserId, selectArg);
+    let user = await this.userService.getUserByOrderingUserId<typeof selectArg>(
+      orderingUserId,
+      selectArg,
+    );
 
     if (!user) {
       throw new ForbiddenException('Access Denied');
@@ -55,14 +55,17 @@ export class UtilsService {
 
     try {
       // Try to use accesstoken to get user key if no success, login again for new token
-      await this.orderingIoService.getUserKey(user.orderingAccessToken, user.orderingUserId);
+      await this.orderingService.getUserKey(user.orderingAccessToken, user.orderingUserId);
     } catch (error) {
       try {
-        await this.sessionService.updateOrderingIoAccessToken({
+        await this.sessionService.updateOrderingAccessToken({
           email: user.email,
           password: decryptedPassword,
         });
-        user = await this.userService.getUserByOrderingUserId<typeof selectArg>(orderingUserId, selectArg);
+        user = await this.userService.getUserByOrderingUserId<typeof selectArg>(
+          orderingUserId,
+          selectArg,
+        );
       } catch (error) {
         this.logError(error);
       }
@@ -90,10 +93,22 @@ export class UtilsService {
   logError(error: any) {
     this.logger.error(error);
     if (error.response) {
-      const errorMsg = error.response.data;      
+      const errorMsg = error.response.data;
       throw new ForbiddenException(errorMsg);
     } else {
       throw new ForbiddenException(error);
     }
+  }
+
+  convertTimeToTimeZone(utcTime: string, targetTimeZone: string): string {
+    const allTimeZones = moment.tz.names();
+
+    // Check if the target timezone is valid
+    if (allTimeZones.includes(targetTimeZone)) {
+      const convertedTime = moment(utcTime).tz(targetTimeZone).toISOString(true);
+
+      return convertedTime;
+    }
+    return null;
   }
 }

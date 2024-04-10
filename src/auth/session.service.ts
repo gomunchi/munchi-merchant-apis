@@ -5,40 +5,37 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { UtilsService } from 'src/utils/utils.service';
-import { SessionDto } from './dto/session.dto';
-import { UserService } from 'src/user/user.service';
-import * as argon2 from 'argon2';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { AuthCredentials } from 'src/type';
-import { OrderingIoService } from 'src/ordering.io/ordering.io.service';
 import { Prisma } from '@prisma/client';
-import { JwtTokenPayload } from './session.type';
-import { ReportAppBusinessDto } from 'src/report/dto/report.dto';
+import * as argon2 from 'argon2';
 import moment from 'moment';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
+import { ReportAppBusinessDto } from 'src/report/dto/report.dto';
+import { AuthCredentials } from 'src/type';
+import { UserService } from 'src/user/user.service';
+import { UtilsService } from 'src/utils/utils.service';
+import { JwtTokenPayload } from './session.type';
 
 @Injectable()
 export class SessionService {
   constructor(
-    @Inject(forwardRef(() => AuthService)) private authService: AuthService,
     @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
     @Inject(forwardRef(() => UserService)) private userService: UserService,
-    @Inject(forwardRef(() => OrderingIoService))
-    private readonly orderingIo: OrderingIoService,
+    @Inject(forwardRef(() => OrderingService))
+    private readonly orderingService: OrderingService,
     private readonly jwt: JwtService,
     private config: ConfigService,
-    private readonly prisma: PrismaService,
-  ) { }
+    private readonly prismaService: PrismaService,
+  ) {}
 
   async hashData(data: string) {
     return argon2.hash(data);
   }
 
-  async updateOrderingIoAccessToken(credentials: AuthCredentials) {
-    const orderingUserInfo = await this.orderingIo.signIn(credentials);
+  async updateOrderingAccessToken(credentials: AuthCredentials) {
+    const orderingUserInfo = await this.orderingService.signIn(credentials);
 
     const userSelect = Prisma.validator<Prisma.UserSelect>()({
       id: true,
@@ -97,7 +94,7 @@ export class SessionService {
     const token = await this.getTokens(jwtPayload);
 
     // Update refresh token back to session
-    await this.prisma.session.update({
+    await this.prismaService.session.update({
       where: {
         publicId: sessionPublicId,
       },
@@ -145,7 +142,7 @@ export class SessionService {
   >(createInput: I, select: S) {
     createInput.refreshToken = await this.hashData(createInput.refreshToken);
 
-    return await this.prisma.session.create({
+    return await this.prismaService.session.create({
       data: createInput,
       select,
     });
@@ -157,16 +154,20 @@ export class SessionService {
         publicId: publicId,
       },
     };
-
     if (args) {
       findArgs = { ...findArgs, ...args };
     }
 
-    return (await this.prisma.session.findUnique(findArgs)) as T;
+    const session = (await this.prismaService.session.findUnique(findArgs)) as T;
+    if (!session) {
+      throw new NotFoundException('No user found');
+    }
+
+    return session;
   }
 
   async deleteSession(where: Prisma.SessionWhereInput) {
-    await this.prisma.session.deleteMany({
+    await this.prismaService.session.deleteMany({
       where,
     });
   }
@@ -181,7 +182,7 @@ export class SessionService {
       },
     });
 
-    const session = await this.prisma.session.findFirst({
+    const session = await this.prismaService.session.findFirst({
       where: {
         publicId: sessionPublicId,
       },
@@ -192,7 +193,7 @@ export class SessionService {
   }
 
   async getSessionByDeviceId(deviceId: string) {
-    return await this.prisma.session.findMany({
+    return await this.prismaService.session.findMany({
       where: {
         deviceId,
       },
@@ -200,7 +201,7 @@ export class SessionService {
   }
 
   async getOfflineSession() {
-    return await this.prisma.session.findMany({
+    return await this.prismaService.session.findMany({
       where: {
         isOnline: false,
       },
@@ -224,7 +225,7 @@ export class SessionService {
   }
 
   async incrementOpenAppNotificationCount(sessionIds: number[]) {
-    await this.prisma.session.updateMany({
+    await this.prismaService.session.updateMany({
       where: {
         id: {
           in: sessionIds,
@@ -239,7 +240,7 @@ export class SessionService {
   }
 
   async getSessionToEmitUpdateAppState() {
-    return await this.prisma.session.findMany({
+    return await this.prismaService.session.findMany({
       where: {
         openAppNotificationCount: {
           gte: 2,
@@ -249,7 +250,7 @@ export class SessionService {
   }
 
   async setOpenAppNotificationSending(status: boolean, sessionIds: number[]) {
-    await this.prisma.session.updateMany({
+    await this.prismaService.session.updateMany({
       where: {
         isOnline: false,
         id: {
@@ -263,7 +264,7 @@ export class SessionService {
   }
 
   async updateAccessTime(sessionPublicId: string) {
-    await this.prisma.session.update({
+    await this.prismaService.session.update({
       where: {
         publicId: sessionPublicId,
       },
@@ -297,7 +298,7 @@ export class SessionService {
 
     data.openAppNotificationCount = isOnline ? 0 : session.openAppNotificationCount + 1;
 
-    await this.prisma.session.update({
+    await this.prismaService.session.update({
       where: {
         publicId: sessionPublicId,
       },
@@ -329,7 +330,6 @@ export class SessionService {
     const session = await this.getSessionByPublicId<
       Prisma.SessionGetPayload<typeof findSessionArgs>
     >(sessionPublicId, findSessionArgs);
-
     if (!session) {
       throw new NotFoundException('Cannot find session by public Id');
     }
@@ -350,7 +350,7 @@ export class SessionService {
     }
 
     // Disconnect all
-    await this.prisma.session.update({
+    await this.prismaService.session.update({
       where: {
         publicId: sessionPublicId,
       },
@@ -374,7 +374,7 @@ export class SessionService {
 
     // Remove other sessions which has same deviceId
     if (invalidSessionIds.length > 0) {
-      await this.prisma.session.deleteMany({
+      await this.prismaService.session.deleteMany({
         where: {
           id: {
             in: invalidSessionIds,
@@ -399,11 +399,109 @@ export class SessionService {
     }
 
     // Reconnect
-    await this.prisma.session.update({
+    await this.prismaService.session.update({
       where: {
         publicId: sessionPublicId,
       },
       data,
     });
+  }
+
+  async getAllUserSession(page: number, row: number) {
+    const sessionSelectArgs = Prisma.validator<Prisma.UserSelect>()({
+      publicId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+
+      businesses: {
+        select: {
+          publicId: true,
+          logo: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+      sessions: {
+        select: {
+          publicId: true,
+          isOnline: true,
+          openAppNotifcationSending: true,
+          lastAccessTs: true,
+        },
+        orderBy: {
+          lastAccessTs: 'desc',
+        },
+      },
+    });
+
+    const users = await this.prismaService.user.findMany();
+
+    const userPerPage = await this.prismaService.user.findMany({
+      orderBy: {
+        id: 'asc',
+      },
+      skip: page === 1 ? 0 : row * (page - 1),
+      take: row,
+      select: sessionSelectArgs,
+    });
+
+    return {
+      data: userPerPage,
+      total: users.length,
+    };
+  }
+
+  async getSessionByPublicUserId(publicUserId: string, page: number, row: number) {
+    const userSelectArgs = Prisma.validator<Prisma.UserSelect>()({
+      sessions: {
+        select: {
+          publicId: true,
+          isOnline: true,
+          openAppNotifcationSending: true,
+          lastAccessTs: true,
+        },
+        orderBy: {
+          lastAccessTs: 'desc',
+        },
+        skip: page === 1 ? 0 : row * (page - 1),
+        take: row,
+      },
+    });
+
+    const totalSession = await this.prismaService.session.findMany({
+      where: {
+        user: {
+          publicId: publicUserId,
+        },
+      },
+    });
+
+    const { sessions } = await this.prismaService.user.findUnique({
+      where: {
+        publicId: publicUserId,
+      },
+      select: userSelectArgs,
+    });
+
+    return {
+      data: sessions,
+      total: totalSession.length,
+    };
+  }
+
+  async deleteUserSessions(publicUserId: string, sessionPublicId: string[]) {
+    await this.userService.validateUser(publicUserId);
+
+    await this.prismaService.session.deleteMany({
+      where: {
+        publicId: {
+          in: sessionPublicId,
+        },
+      },
+    });
+
+    return 'Delete sessions successfully';
   }
 }

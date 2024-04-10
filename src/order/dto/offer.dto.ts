@@ -1,10 +1,9 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 
 enum OfferType {
   Offer = 1,
   Coupon = 2,
 }
-
 
 class SummaryData {
   @Expose()
@@ -14,7 +13,6 @@ class SummaryData {
     this.discount = data;
   }
 }
-
 
 @Exclude()
 export class OfferDto {
@@ -27,8 +25,8 @@ export class OfferDto {
   @Expose()
   type: OfferType;
 
-  @Expose()
-  rate_type: string;
+  @Expose({ name: 'rate_type' })
+  rateType: string;
 
   @Expose()
   rate: number;

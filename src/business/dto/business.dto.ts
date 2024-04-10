@@ -1,9 +1,8 @@
-/* eslint-disable prettier/prettier */
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Exclude, Expose, Transform, Type } from 'class-transformer';
-import { OwnerDto } from './owner.dto';
+import { Exclude, Expose, Type } from 'class-transformer';
 import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
-import { Schedule } from 'src/ordering.io/ordering.io.type';
+import { AvailableProvider } from 'src/provider/provider.type';
+import { OwnerDto } from './owner.dto';
 
 @Exclude()
 export class BusinessDto {
@@ -11,8 +10,8 @@ export class BusinessDto {
     description: 'The id of business',
     example: '123456',
   })
-  @Expose()
-  id: number;
+  @Expose({ name: 'id' })
+  id: string;
 
   @ApiProperty({
     description: 'The name of business',
@@ -29,7 +28,21 @@ export class BusinessDto {
   email: string;
 
   @ApiProperty({
-    description: 'The id of business',
+    description: 'A short description of the business',
+    example: 'The restaurant is easy is easy to find.',
+  })
+  @Expose()
+  description: string;
+
+  @ApiProperty({
+    description: 'The phone number of the business',
+    example: '0123456789',
+  })
+  @Expose()
+  phone: string;
+
+  @ApiProperty({
+    description: 'The address of business',
     example: 'Helsinkikatu 100C, Helsinki, Finland',
   })
   @Expose()
@@ -41,6 +54,9 @@ export class BusinessDto {
   })
   @Expose()
   logo: string;
+
+  @Expose({ name: 'timezone' })
+  timeZone: string;
 
   @ApiProperty({
     description: 'The address of business',
@@ -98,7 +114,7 @@ export class AllBusinessDto {
     description: 'The id of business',
     example: '123456',
   })
-  @Expose({ name: 'id' })  
+  @Expose({ name: 'id' })
   id: string;
 
   @ApiProperty({
@@ -130,6 +146,13 @@ export class SetOnlineStatusDto {
   id: string;
 
   @ApiProperty({
+    description: 'Provider want to disable',
+    example: 'Testing',
+  })
+  @IsString()
+  provider: AvailableProvider;
+
+  @ApiProperty({
     description: 'Status want to set. true for on and false for off',
     example: false,
   })
@@ -146,6 +169,4 @@ export class SetOnlineStatusDto {
   duration: number;
 }
 
-export class GetOnlineStatusDto {
-
-}
+export class GetOnlineStatusDto {}

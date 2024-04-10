@@ -1,15 +1,12 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import moment from 'moment';
-import { UserResponse } from 'src/auth/dto/auth.dto';
-import { OrderingIoService } from 'src/ordering.io/ordering.io.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { AuthTokens } from 'src/type';
-import { UtilsService } from 'src/utils/utils.service';
-import { UserDto } from './dto/user.dto';
-import { plainToClass } from 'class-transformer';
-import { SessionService } from 'src/auth/session.service';
-import { OrderingIoUser } from 'src/ordering.io/ordering.io.type';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import moment from 'moment';
+import { SessionService } from 'src/auth/session.service';
+
+import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
+import { OrderingUser } from 'src/provider/ordering/ordering.type';
+import { UtilsService } from 'src/utils/utils.service';
 
 type UserInfoSelectBase = {
   id: true;
@@ -19,15 +16,15 @@ type UserInfoSelectBase = {
 @Injectable()
 export class UserService {
   constructor(
-    private prisma: PrismaService,
+    private prismaService: PrismaService,
     @Inject(forwardRef(() => UtilsService)) private readonly utils: UtilsService,
     @Inject(forwardRef(() => SessionService)) private readonly sessionService: SessionService,
-    @Inject(forwardRef(() => OrderingIoService)) private readonly orderingIo: OrderingIoService,
+    @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
   ) {}
 
   getUserInternally = async (orderingUserId: number, publicUserId: string) => {
     if (orderingUserId === null) {
-      const user = await this.prisma.user.findUnique({
+      const user = await this.prismaService.user.findUnique({
         where: {
           publicId: publicUserId,
         },
@@ -37,7 +34,7 @@ export class UserService {
       });
       return user;
     } else {
-      const user = await this.prisma.user.findUnique({
+      const user = await this.prismaService.user.findUnique({
         where: {
           orderingUserId: orderingUserId,
         },
@@ -51,7 +48,7 @@ export class UserService {
 
   deleteUser = async (userId: number) => {
     const user = await this.getUserInternally(userId, null);
-    const deleteUser = await this.prisma.user.delete({
+    const deleteUser = await this.prismaService.user.delete({
       where: {
         id: user.id,
       },
@@ -64,7 +61,7 @@ export class UserService {
     publicId: string,
     select?: S,
   ): Promise<Prisma.UserGetPayload<{ select: S }>> {
-    return await this.prisma.user.findFirst({
+    return await this.prismaService.user.findFirst({
       where: {
         publicId,
       },
@@ -76,7 +73,7 @@ export class UserService {
     orderingUserId: number,
     select: S,
   ) {
-    return await this.prisma.user.findUnique({
+    return await this.prismaService.user.findUnique({
       where: {
         orderingUserId,
       },
@@ -85,7 +82,7 @@ export class UserService {
   }
 
   async upsertUserFromOrderingInfo<S extends Prisma.UserSelect = UserInfoSelectBase>(
-    userInfo: OrderingIoUser & { password: string },
+    userInfo: OrderingUser & { password: string },
     select: S,
   ) {
     const expiredAt = moment().utc().add(userInfo.session.expires_in, 'milliseconds');
@@ -101,7 +98,7 @@ export class UserService {
       hash: this.utils.getPassword(userInfo.password, true),
     };
 
-    return await this.prisma.user.upsert({
+    return await this.prismaService.user.upsert({
       where: {
         orderingUserId: userInfo.id,
       },
@@ -109,5 +106,20 @@ export class UserService {
       update: data,
       select,
     });
+  }
+
+  async validateUser(userId: string | number) {
+    const searchField = typeof userId === 'number' ? 'orderingUserId' : 'publicId';
+    const whereClause: any = {};
+    whereClause[searchField] = userId;
+    const user = await this.prismaService.user.findMany({
+      where: whereClause,
+    });
+
+    if (!user || user.length === 0) {
+      throw new NotFoundException('No user found');
+    }
+
+    return user;
   }
 }

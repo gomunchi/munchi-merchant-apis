@@ -8,46 +8,208 @@ datasource db {
 }
 
 model Session {
-  id                       Int        @id @default(autoincrement())
-  publicId                 String     @unique @default(uuid())
-  refreshToken             String     @unique
-  userId                   Int
-  user                     User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  businesses               Business[] @relation("BusinessSessionTable")
-  deviceId                 String?    @unique
-  isOnline                 Boolean    @default(true)
-  lastAccessTs             DateTime   @db.Timestamp()
-  openAppNotificationCount Int?       @default(0)
-  openAppNotifcationSending Boolean   @default(false)
+  id                        Int        @id @default(autoincrement())
+  publicId                  String     @unique @default(uuid())
+  refreshToken              String     @unique
+  userId                    Int
+  user                      User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  businesses                Business[] @relation("BusinessSessionTable")
+  deviceId                  String?    @unique
+  isOnline                  Boolean    @default(true)
+  lastAccessTs              DateTime   @db.Timestamp()
+  openAppNotificationCount  Int?       @default(0)
+  openAppNotifcationSending Boolean    @default(false)
+}
+
+model ApiKey {
+  id    Int    @id @default(autoincrement())
+  name  String
+  value String
+
+  @@unique([name, value])
+}
+
+model ProviderCredential {
+  id       Int     @unique @default(autoincrement())
+  username String?
+  password String?
+  apiKey   String?
+  user     User[]  @relation("User-provider")
 }
 
 model User {
-  id                           Int        @id @default(autoincrement())
-  orderingUserId               Int        @unique
-  orderingAccessToken          String     @unique
-  orderingAccessTokenExpiredAt DateTime   @db.Timestamp()
+  id                           Int                 @id @default(autoincrement())
+  orderingUserId               Int                 @unique
+  orderingAccessToken          String              @unique
+  orderingAccessTokenExpiredAt DateTime            @db.Timestamp()
   firstName                    String
   lastName                     String
-  email                        String     @unique
+  email                        String              @unique
   hash                         String
   level                        Int?
-  publicId                     String     @unique @default(uuid())
+  publicId                     String              @unique @default(uuid())
   sessions                     Session[]
-  businesses                   Business[] @relation("MyUserBusinessTable")
+  businesses                   Business[]          @relation("MyUserBusinessTable")
+  providerCredentials          ProviderCredential? @relation("User-provider", fields: [providerCredentialsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  providerCredentialsId        Int?
 
   @@map("user")
 }
 
 model Business {
-  id                 Int       @id @default(autoincrement())
-  orderingBusinessId Int       @unique
-  publicId           String    @unique @default(uuid())
+  id                 Int        @id @default(autoincrement())
+  orderingBusinessId String     @unique
+  publicId           String     @unique @default(uuid())
   name               String
-  owners             User[]    @relation("MyUserBusinessTable")
-  sessions           Session[] @relation("BusinessSessionTable")
+  owners             User[]     @relation("MyUserBusinessTable")
+  sessions           Session[]  @relation("BusinessSessionTable")
   logo               String?
+  email              String?
+  phone              String?
+  address            String?
+  description        String?
+  timeZone           String     @default("Europe/Helsinki")
+  orders             Order[]    @relation("BusinessOrder")
+  enabled            Boolean    @default(true)
+  open               Boolean    @default(true)
+  provider           Provider[] @relation("Provider")
 
   @@map("business")
+}
+
+model Provider {
+  id                 Int      @unique @default(autoincrement())
+  orderingBusinessId String   @unique
+  business           Business @relation("Provider", fields: [orderingBusinessId], references: [orderingBusinessId], onDelete: Cascade, onUpdate: Cascade)
+  name               String
+  providerId         String   @unique
+  open               Boolean  @default(true)
+  enabled            Boolean  @default(true)
+  ipadFree           Boolean?
+}
+
+model Order {
+  id                 Int       @id @default(autoincrement())
+  orderId            String    @unique
+  orderNumber        String    @default("0")
+  provider           String
+  orderingBusinessId String
+  payMethodId        Int?
+  business           Business  @relation("BusinessOrder", fields: [orderingBusinessId], references: [orderingBusinessId], onDelete: Cascade, onUpdate: Cascade)
+  status             String
+  deliveryType       Int
+  table              Int?
+  preparedIn         String?
+  createdAt          String
+  comment            String?
+  type               String
+  deliveryEta        String?
+  pickupEta          String?
+  preorder           Preorder? @relation("preorder")
+  products           Product[] @relation("order-product")
+  offers             Offer[]   @relation("order-offer")
+  lastModified       String?
+  customer           Customer? @relation("order-customer")
+  summary            Summary?  @relation("order-summary")
+}
+
+//Summary
+
+model Summary {
+  id      Int    @id @default(autoincrement())
+  total   String
+  orderId String @unique
+  order   Order  @relation("order-summary", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+}
+
+//Customer
+
+model Customer {
+  id      Int     @id @default(autoincrement())
+  name    String
+  phone   String?
+  orderId String  @unique
+  order   Order   @relation("order-customer", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+}
+
+//Preorder
+model Preorder {
+  id           Int    @id @default(autoincrement())
+  status       String
+  preorderTime String
+  orderId      String @unique
+  order        Order? @relation("preorder", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+}
+
+//Preorder Queue
+
+model PreorderQueue {
+  id               Int      @id @default(autoincrement())
+  orderId          Int      @unique
+  providerOrderId  String   @unique
+  businessPublicId String
+  processing       Boolean  @default(false)
+  reminderTime     DateTime
+  orderNumber      String
+  provider         String
+}
+
+//Order product
+model Product {
+  id        Int      @id @default(autoincrement())
+  productId String
+  name      String
+  quantity  Int
+  price     String // Replace with the appropriate type for your use case
+  comment   String?
+  orderId   String
+  order     Order    @relation("order-product", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+  options   Option[] @relation("product-option")
+}
+
+model Option {
+  id         Int         @id @default(autoincrement())
+  optionId   String
+  name       String
+  image      String?
+  price      String? // Replace with the appropriate type for your use case
+  productId  Int
+  product    Product     @relation("product-option", fields: [productId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  subOptions SubOption[] @relation("option-suboption")
+}
+
+model SubOption {
+  id          Int     @id @default(autoincrement())
+  subOptionId String
+  name        String
+  image       String?
+  price       String // Replace with the appropriate type for your use case
+  position    Int?
+  quantity    Int
+  optionId    Int
+  options     Option  @relation("option-suboption", fields: [optionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+}
+
+//Order summary price
+
+//Order offer
+model Offer {
+  id        String        @id @unique @default(uuid())
+  name      String
+  label     String
+  type      Int
+  rate_type String
+  rate      Float
+  summary   OfferSummary? @relation("offer-summary")
+  orderId   String        @unique
+  order     Order         @relation("order-offer", fields: [orderId], references: [orderId])
+}
+
+model OfferSummary {
+  id       String @id @unique @default(uuid())
+  offerId  String @unique
+  offer    Offer? @relation("offer-summary", fields: [offerId], references: [id])
+  discount String
 }
 
 model Notification {

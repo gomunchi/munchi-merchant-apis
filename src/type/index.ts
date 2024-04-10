@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { AvailableOrderStatus } from 'src/order/dto/order.dto';
+import { AvailableProvider } from 'src/provider/provider.type';
 
 export class AuthCredentials {
   @ApiProperty({
@@ -27,8 +29,10 @@ export type FilterQuery = {
 };
 
 export interface OrderData {
-  preparedIn: number;
-  orderStatus: string;
+  provider: AvailableProvider;
+  preparedIn: string;
+  orderStatus: AvailableOrderStatus;
+  reason?: string;
 }
 
 export type BusinessAttributes = {

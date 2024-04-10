@@ -4,11 +4,12 @@ import { NotificationModule } from '../notification/notification.module'; // Adj
 import { SessionService } from 'src/auth/session.service';
 import { AuthModule } from 'src/auth/auth.module';
 import { UserModule } from 'src/user/user.module';
-import { OrderingIoModule } from 'src/ordering.io/ordering.io.module';
+
 import { JwtModule } from '@nestjs/jwt';
+import { ProviderModule } from 'src/provider/provider.module';
 
 @Module({
-  imports: [NotificationModule, AuthModule, UserModule, OrderingIoModule, JwtModule],
+  imports: [NotificationModule, AuthModule, UserModule, ProviderModule, JwtModule],
   controllers: [ReportController],
   providers: [SessionService],
 })
