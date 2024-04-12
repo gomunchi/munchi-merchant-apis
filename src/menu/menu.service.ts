@@ -162,7 +162,7 @@ export class MenuService {
             return;
           }
 
-          let hasMatch: boolean = false;
+          let hasMatch = false;
 
           for (const productOption of product.options) {
             const hasMatchingOption: boolean = extrasParentObj.options.some(
@@ -291,6 +291,7 @@ export class MenuService {
       orderingAccessToken,
       business.orderingBusinessId,
     );
+    console.log('🚀 ~ MenuService ~ getBusinessProductOption ~ extrasData:', extrasData);
 
     const optionsData = extrasData.flatMap((extra) => extra.options);
 
