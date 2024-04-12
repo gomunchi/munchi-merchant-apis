@@ -141,7 +141,7 @@ export class ProviderManagmentService {
     providers: Provider[],
     externalProductId: string,
     orderingUserId: number,
-    data: Object,
+    data: unknown,
   ) {
     // Need a service to transform the body data to data that fit with specific provider
     // This will sync other provider menu except Ordering
