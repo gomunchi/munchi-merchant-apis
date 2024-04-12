@@ -13,10 +13,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
-import {
-  MenuQuery,
-  ValidatedProductBody
-} from './dto/menu.dto';
+import { MenuQuery, ValidatedProductBody } from './dto/menu.dto';
 import { MenuService } from './menu.service';
 
 @Controller('menu')
@@ -77,7 +74,6 @@ export class MenuController {
     @Param('categoryId') categoryId: string,
     @Param('productId') productId: string,
   ) {
-
     const { orderingUserId } = request.user;
 
     return this.menuService.setBusinessProductStatus(
@@ -95,7 +91,6 @@ export class MenuController {
     @Body(new ValidationPipe()) bodyData: ValidatedProductBody,
     @Param('categoryId') categoryId: string,
   ) {
-    
     const { orderingUserId } = request.user;
 
     return this.menuService.setBusinessCategoryStatus(orderingUserId, bodyData, categoryId);
