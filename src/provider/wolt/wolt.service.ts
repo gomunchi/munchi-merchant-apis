@@ -487,22 +487,22 @@ export class WoltService implements ProviderService {
   ) {
     const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
 
+    const option = {
+      method: 'PATCH',
+      baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/items`,
+      auth: {
+        username: woltCredentials.username,
+        password: woltCredentials.password,
+      },
+      data: {
+        external_id: externalProductId,
+        enabled: bodyData.enabled,
+      },
+    };
+    console.log('🚀 ~ WoltService ~ option:', option);
+
     try {
-      const response = await axios.post(
-        `${this.woltApiUrl}/venues/${woltVenueId}/items`,
-        [
-          {
-            external_id: externalProductId,
-            enabled: bodyData.enabled,
-          },
-        ],
-        {
-          auth: {
-            username: woltCredentials.username,
-            password: woltCredentials.password,
-          },
-        },
-      );
+      const response = await axios.request(option);
 
       return response.data;
     } catch (error: any) {
