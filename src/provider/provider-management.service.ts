@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, Provider } from '@prisma/client';
+import { Business, MenuTracking, Prisma, Provider } from '@prisma/client';
 import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus } from '../order/dto/order.dto';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
@@ -12,6 +12,7 @@ import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
 import { OrderingOrder } from './ordering/dto/ordering-order.dto';
 import { OrderingMenuCategory } from './ordering/dto/ordering-menu.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class ProviderManagmentService {
@@ -22,6 +23,7 @@ export class ProviderManagmentService {
     private utilService: UtilsService,
     private orderingService: OrderingService,
     private orderingOrderMapperService: OrderingOrderMapperService,
+    private prismaService: PrismaService,
     private eventEmitter: EventEmitter2,
   ) {}
   private readonly logger = new Logger(ProviderManagmentService.name);
@@ -122,17 +124,13 @@ export class ProviderManagmentService {
       .rejectOrder(orderingUserId, orderId, orderRejectData);
   }
 
-  async syncProviderMenu(
-    providers: Provider[],
-    orderingUserId: number,
-    orderingMenuData: OrderingMenuCategory[],
-  ) {
+  async syncProviderMenu(providers: Provider[], orderingMenuData: OrderingMenuCategory[]) {
     // This will sync other provider menu except Ordering
     if (providers.length > 0) {
       providers.forEach((provider) => {
         return this.moduleRef
           .get(`${provider.name}Service`)
-          .syncMenu(provider.providerId, orderingUserId, orderingMenuData);
+          .syncMenu(provider.providerId, orderingMenuData);
       });
     }
   }
@@ -163,5 +161,42 @@ export class ProviderManagmentService {
     return (
       Array.isArray(providers) && providers.every((provider) => providerArray.includes(provider))
     );
+  }
+
+  async menuTracking(
+    queue: MenuTracking,
+    business: Business & {
+      provider: Provider[];
+    },
+  ) {
+    if (!business) {
+      throw new ForbiddenException('No business found');
+    }
+
+    const orderingApiKey = await this.prismaService.apiKey.findFirst({
+      where: {
+        name: 'ORDERING_API_KEY',
+      },
+    });
+
+    const menuData = await this.orderingService.getMenuCategory(
+      '',
+      business.orderingBusinessId,
+      orderingApiKey.value,
+    );
+    const { provider: providers } = business;
+
+    if (providers.length > 0) {
+      await this.syncProviderMenu(providers, menuData);
+
+      this.prismaService.menuTracking.update({
+        where: {
+          businessPublicId: business.publicId,
+        },
+        data: {
+          onCooldown: false,
+        },
+      });
+    }
   }
 }

@@ -37,7 +37,7 @@ import { MenuItemBodyData } from './wolt.type';
 export class WoltService implements ProviderService {
   private readonly logger = new Logger(ProviderService.name);
   private woltApiUrl: string;
-
+  private woltMenuApiDelayTime: number;
   constructor(
     private configService: ConfigService,
     private prismaService: PrismaService,
@@ -48,6 +48,7 @@ export class WoltService implements ProviderService {
     private orderingMenuMapperService: OrderingMenuMapperService,
   ) {
     this.woltApiUrl = this.configService.get('WOLT_API_URL');
+    this.woltMenuApiDelayTime = 15;
   }
 
   async getOrderByStatus(
@@ -495,11 +496,15 @@ export class WoltService implements ProviderService {
         password: woltCredentials.password,
       },
       data: {
-        external_id: externalProductId,
-        enabled: bodyData.enabled,
+        data: [
+          {
+            external_id: externalProductId,
+            enabled: bodyData.enabled,
+          },
+        ],
       },
     };
-    console.log('🚀 ~ WoltService ~ option:', option);
+    console.log('🚀 ~ WoltService ~ option:', option.data);
 
     try {
       const response = await axios.request(option);
@@ -511,9 +516,8 @@ export class WoltService implements ProviderService {
     }
   }
 
-  async createMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
-
+  async createMenu(woltVenueId: string, woltMenuData: WoltMenuData) {
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'venueId');
     try {
       const response = await axios.post(
         `${this.woltApiUrl}/v1/restaurants/${woltVenueId}/menu`,
@@ -528,17 +532,44 @@ export class WoltService implements ProviderService {
 
       return response.data;
     } catch (error: any) {
+      const business = await this.prismaService.provider.findUnique({
+        where: {
+          providerId: woltVenueId,
+        },
+        include: {
+          business: {
+            select: {
+              publicId: true,
+            },
+          },
+        },
+      });
+
+      const menuTracking = await this.prismaService.menuTracking.findUnique({
+        where: {
+          businessPublicId: business.business.publicId,
+        },
+      });
+
+      const nextSynchronizeTime = moment(menuTracking.lastUpdated)
+        .add(this.woltMenuApiDelayTime, 'minutes')
+        .toISOString();
+
+      //Set Menu tracking to cooldown
+      this.prismaService.menuTracking.update({
+        where: {
+          businessPublicId: business.business.publicId,
+        },
+        data: {
+          onCooldown: true,
+          synchronizeTime: nextSynchronizeTime,
+        },
+      });
       throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
 
-  async syncMenu(
-    woltVenueId: string,
-    orderingUserId: number,
-    orderingMenuData: OrderingMenuCategory[],
-  ) {
-    console.log('Syncing menu');
-
+  async syncMenu(woltVenueId: string, orderingMenuData: OrderingMenuCategory[]) {
     const result: WoltMenuCategory[] = orderingMenuData
       .map((orderingCategory: OrderingMenuCategory) => {
         if (orderingCategory.products.length === 0) {
@@ -555,7 +586,7 @@ export class WoltService implements ProviderService {
       categories: result,
     };
 
-    await this.createMenu(woltVenueId, orderingUserId, woltMenuData);
+    await this.createMenu(woltVenueId, woltMenuData);
   }
 
   generateWoltUpdateEndPoint(orderStatus: AvailableOrderStatus, woltOrderFromDb: OrderResponse) {
