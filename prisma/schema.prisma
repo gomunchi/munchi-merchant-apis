@@ -190,8 +190,6 @@ model SubOption {
   options     Option  @relation("option-suboption", fields: [optionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
-//Order summary price
-
 //Order offer
 model Offer {
   id        String        @id @unique @default(uuid())
@@ -233,3 +231,15 @@ model ActiveStatusQueue {
 
   @@map("active_status_queue")
 }
+
+model MenuTracking {
+  id               Int      @id @default(autoincrement())
+  businessPublicId String   @unique
+  name             String
+  type             String
+  lastUpdated      DateTime @default(now()) @db.Timestamp()
+  synchronizeTime  DateTime
+  processing       Boolean  @default(false)
+  onCooldown       Boolean  @default(false)
+}
+
