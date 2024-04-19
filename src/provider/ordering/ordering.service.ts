@@ -8,13 +8,16 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthCredentials, OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { ProviderService } from '../provider.service';
-import { WoltMenuData } from '../wolt/dto/wolt-menu.dto';
+import { WoltCategory, WoltMenuData } from '../wolt/dto/wolt-menu.dto';
 import { WoltService } from '../wolt/wolt.service';
 import { OrderingMenuCategory } from './dto/ordering-menu.dto';
 import { OrderingOrder } from './dto/ordering-order.dto';
 import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
 import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
+import { OrderingMenuMapperService } from './ordering-menu-mapper';
+import { Provider, Business as BusinessPrisma } from '@prisma/client';
+import { ProviderEnum } from '../provider.type';
 
 @Injectable()
 export class OrderingService implements ProviderService {
@@ -25,6 +28,7 @@ export class OrderingService implements ProviderService {
     private utilService: UtilsService,
     private readonly prismaService: PrismaService,
     private readonly orderingOrderMapperService: OrderingOrderMapperService,
+    private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly orderingSyncService: OrderingSyncService,
     private readonly woltService: WoltService,
   ) {
@@ -469,6 +473,7 @@ export class OrderingService implements ProviderService {
   async getMenuCategory(
     orderingAccessToken: string,
     orderingBusinessId: string,
+    apiKey?: string,
   ): Promise<OrderingMenuCategory[]> {
     const options = {
       method: 'GET',
@@ -478,6 +483,10 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${orderingAccessToken}`,
       },
     };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
 
     try {
       const response = await axios.request(options);
@@ -670,6 +679,35 @@ export class OrderingService implements ProviderService {
     }
   }
 
+  async editProductSuboptions(
+    orderingAccessToken: string,
+    orderingBusinessId: string,
+    extraId: string,
+    optionId: string,
+    suboptionId: string,
+    data: Object,
+  ) {
+    const options = {
+      method: 'PUT',
+      url: this.utilService.getEnvUrl(
+        'business',
+        `${orderingBusinessId}/extras/${extraId}/options/${optionId}/suboptions/${suboptionId}`,
+      ),
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${orderingAccessToken}`,
+      },
+      data: data,
+    };
+
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+    }
+  }
+
   async createProductOptionsSuboptions(
     orderingAccessToken: string,
     orderingBusinessId: string,
@@ -788,5 +826,36 @@ export class OrderingService implements ProviderService {
     } catch (error) {
       this.utilService.logError(error);
     }
+  }
+
+  async synchronizeMenuToWolt(
+    orderingAccessToken: string,
+    business: BusinessPrisma & {
+      provider: Provider[];
+    },
+  ) {
+    const woltVenue = business.provider.filter(
+      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+    );
+
+    const menu = await this.getMenuCategory(orderingAccessToken, business.orderingBusinessId);
+
+    const result: WoltCategory[] = menu
+      .map((orderingCategory: OrderingMenuCategory) => {
+        if (orderingCategory.products.length === 0) {
+          return undefined; // Returns undefined
+        }
+        return this.orderingMenuMapperService.mapToWoltCategory(orderingCategory);
+      })
+      .filter(Boolean);
+
+    const woltMenuData: WoltMenuData = {
+      id: this.utilService.generatePublicId(),
+      currency: 'EUR',
+      primary_language: 'en',
+      categories: result,
+    };
+
+    await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
   }
 }
