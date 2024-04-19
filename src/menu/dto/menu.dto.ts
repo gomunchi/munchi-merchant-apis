@@ -1,5 +1,5 @@
 import { Exclude, Expose, Type } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export interface OrderingProductCategory {
   id: number;
@@ -26,23 +26,38 @@ export interface OrderingCategoryExtraOptionSubOption {
   preselected: boolean;
 }
 
-export class MenuQuery {
+export class ValidatedBusinessId {
   @IsString()
   @IsNotEmpty()
   businessPublicId: string;
 }
 
-export class ValidatedProductBody {
-  @IsString()
+export class ValidatedProductBody extends ValidatedBusinessId {
   @IsNotEmpty()
-  publicBusinessId: string;
+  @IsArray()
+  data: MenuProductDto[];
+}
+
+export class ValidatedCategoryBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsArray()
+  data: Omit<MenuCategoryDto, 'products'>[];
+}
+
+export class ValidatedSuboptionBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsArray()
+  data: (MenuProductOptionSuboptionDto & { extraId: string })[];
+}
+
+export class ValidatedMenuTrackingBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsString()
+  type:string;
 
   @IsNotEmpty()
-  enabled: boolean;
-
   @IsString()
-  @IsOptional()
-  reminderTime: string;
+  timeSynchronize:string;
 }
 
 export class ValidatedProductId {

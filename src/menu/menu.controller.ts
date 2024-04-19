@@ -3,8 +3,8 @@ import {
   Controller,
   Delete,
   Get,
-  Param,
-  Put,
+  Patch,
+  Post,
   Query,
   Req,
   Res,
@@ -13,7 +13,13 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
-import { MenuQuery, ValidatedProductBody } from './dto/menu.dto';
+import {
+  ValidatedBusinessId,
+  ValidatedCategoryBody,
+  ValidatedMenuTrackingBody,
+  ValidatedProductBody,
+  ValidatedSuboptionBody,
+} from './dto/menu.dto';
 import { MenuService } from './menu.service';
 
 @Controller('menu')
@@ -38,7 +44,10 @@ export class MenuController {
 
   @UseGuards(JwtGuard)
   @Get('product')
-  getBusinessProduct(@Req() request: any, @Query(new ValidationPipe()) menuQuery: MenuQuery) {
+  getBusinessProduct(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
     const { orderingUserId } = request.user;
 
     return this.menuService.getBusinessProduct(orderingUserId, menuQuery.businessPublicId);
@@ -46,7 +55,10 @@ export class MenuController {
 
   @UseGuards(JwtGuard)
   @Get('option')
-  getBusinessProductOption(@Req() request: any, @Query(new ValidationPipe()) menuQuery: MenuQuery) {
+  getBusinessProductOption(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
     const { orderingUserId } = request.user;
 
     return this.menuService.getBusinessProductOption(orderingUserId, menuQuery.businessPublicId);
@@ -56,7 +68,7 @@ export class MenuController {
   @Get('product/unavailable')
   getUnavailableBusinessProduct(
     @Req() request: any,
-    @Query(new ValidationPipe()) menuQuery: MenuQuery,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
   ) {
     const { orderingUserId } = request.user;
 
@@ -67,33 +79,51 @@ export class MenuController {
   }
 
   @UseGuards(JwtGuard)
-  @Put('category/:categoryId/product/:productId')
-  putBusinessProduct(
+  @Patch('category')
+  businessCategory(
     @Req() request: any,
-    @Body(new ValidationPipe()) bodyData: ValidatedProductBody,
-    @Param('categoryId') categoryId: string,
-    @Param('productId') productId: string,
+    @Body(new ValidationPipe()) bodyData: ValidatedCategoryBody,
   ) {
+    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
     const { orderingUserId } = request.user;
 
-    return this.menuService.setBusinessProductStatus(
-      orderingUserId,
-      bodyData,
-      categoryId,
-      productId,
-    );
+    return this.menuService.editBusinessCategory(orderingUserId, bodyData);
   }
 
   @UseGuards(JwtGuard)
-  @Put('category/:categoryId')
-  putBusinessCategory(
-    @Req() request: any,
-    @Body(new ValidationPipe()) bodyData: ValidatedProductBody,
-    @Param('categoryId') categoryId: string,
-  ) {
+  @Patch('products')
+  businessProduct(@Req() request: any, @Body(new ValidationPipe()) bodyData: ValidatedProductBody) {
+    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
     const { orderingUserId } = request.user;
 
-    return this.menuService.setBusinessCategoryStatus(orderingUserId, bodyData, categoryId);
+    return this.menuService.editBusinessProduct(orderingUserId, bodyData);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('suboptions')
+  businessSuboption(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedSuboptionBody,
+  ) {
+    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
+    const { orderingUserId } = request.user;
+
+    return this.menuService.editBusinessSuboption(orderingUserId, bodyData);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('tracking')
+  menuTracking(@Req() request: any, @Query(new ValidationPipe()) query: ValidatedBusinessId) {
+    return this.menuService.getTrackingData(query.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('tracking')
+  menuTrackingInformation(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedMenuTrackingBody,
+  ) {
+    return this.menuService.createMenuSynchronizationTracking(bodyData);
   }
 
   @UseGuards(JwtGuard)
