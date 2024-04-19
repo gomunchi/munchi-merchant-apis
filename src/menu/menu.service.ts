@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Provider } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { BusinessService } from 'src/business/business.service';
 import { OrderingMenuCategory } from 'src/provider/ordering/dto/ordering-menu.dto';
@@ -15,17 +15,25 @@ import {
   MenuCategoryDto,
   MenuProductDto,
   MenuProductOptionDto,
+  ValidatedCategoryBody,
+  ValidatedMenuTrackingBody,
   ValidatedProductBody,
+  ValidatedSuboptionBody,
 } from './dto/menu.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import moment from 'moment';
 
 @Injectable()
 export class MenuService {
+  private readonly logger = new Logger(MenuService.name);
   constructor(
     private orderingService: OrderingService,
     private orderingMenuMapperService: OrderingMenuMapperService,
     private woltMenuMapperService: WoltMenuMapperService,
-    private businessService: BusinessService,
     private woltService: WoltService,
+    private prismaService: PrismaService,
+    private businessService: BusinessService,
     private providerMangementService: ProviderManagmentService,
     private utilService: UtilsService,
   ) {}
@@ -63,7 +71,7 @@ export class MenuService {
     };
 
     //Sync order to Wolt
-    await this.woltService.createMenu(woltVenue[0].providerId, orderingUserId, woltMenuData);
+    await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
 
     return woltMenuData;
   }
@@ -92,107 +100,107 @@ export class MenuService {
       woltVenue[0].providerId,
     );
 
-    if (woltMenuData.status === 'READY') {
-      const { options } = woltMenuData.menu;
-      const orderingCategoryData = this.woltMenuMapperService.mapToOrderingCategory(woltMenuData);
+    // if (woltMenuData.status === 'READY') {
+    //   const { options } = woltMenuData.menu;
+    //   const orderingCategoryData = this.woltMenuMapperService.mapToOrderingCategory(woltMenuData);
 
-      // Create product extras
-      const extras = await this.orderingService.createProductsExtraField(
-        orderingAccessToken,
-        orderingBusinessId,
-      );
+    //   // Create product extras
+    //   const extras = await this.orderingService.createProductsExtraField(
+    //     orderingAccessToken,
+    //     orderingBusinessId,
+    //   );
 
-      const newExtraId = typeof extras.id === 'number' ? extras.id.toString() : extras.id;
+    //   const newExtraId = typeof extras.id === 'number' ? extras.id.toString() : extras.id;
 
-      const extrasParentObj = {
-        id: newExtraId,
-        options: [],
-      };
+    //   const extrasParentObj = {
+    //     id: newExtraId,
+    //     options: [],
+    //   };
 
-      // Create option extras
-      options.map(async (option) => {
-        extrasParentObj.options.push(option);
-        const formattedOption = this.woltMenuMapperService.mapToOrderingOption(option);
-        const newOption = await this.orderingService.createProductOptions(
-          orderingAccessToken,
-          orderingBusinessId,
-          newExtraId,
-          formattedOption,
-        );
-        const newOptionId =
-          typeof newOption.id === 'number' ? newOption.id.toString() : newOption.id;
+    //   // Create option extras
+    //   options.map(async (option) => {
+    //     extrasParentObj.options.push(option);
+    //     const formattedOption = this.woltMenuMapperService.mapToOrderingOption(option);
+    //     const newOption = await this.orderingService.createProductOptions(
+    //       orderingAccessToken,
+    //       orderingBusinessId,
+    //       newExtraId,
+    //       formattedOption,
+    //     );
+    //     const newOptionId =
+    //       typeof newOption.id === 'number' ? newOption.id.toString() : newOption.id;
 
-        // Create suboption extras
-        formattedOption.values.map(async (value) => {
-          await this.orderingService.createProductOptionsSuboptions(
-            orderingAccessToken,
-            orderingBusinessId,
-            newExtraId,
-            newOptionId,
-            value,
-          );
-        });
-      });
+    //     // Create suboption extras
+    //     formattedOption.values.map(async (value) => {
+    //       await this.orderingService.createProductOptionsSuboptions(
+    //         orderingAccessToken,
+    //         orderingBusinessId,
+    //         newExtraId,
+    //         newOptionId,
+    //         value,
+    //       );
+    //     });
+    //   });
 
-      // Create category
-      orderingCategoryData.map(async (category: any) => {
-        const newCategory = await this.orderingService.createCategory(
-          orderingAccessToken,
-          orderingBusinessId,
-          category,
-        );
+    //   // Create category
+    //   orderingCategoryData.map(async (category: any) => {
+    //     const newCategory = await this.orderingService.createCategory(
+    //       orderingAccessToken,
+    //       orderingBusinessId,
+    //       category,
+    //     );
 
-        const newCategoryId =
-          typeof newCategory.id === 'number' ? newCategory.id.toString() : newCategory.id;
+    //     const newCategoryId =
+    //       typeof newCategory.id === 'number' ? newCategory.id.toString() : newCategory.id;
 
-        // Create products
-        category.products.map(async (product: any) => {
-          // Create product
-          const newProduct = await this.orderingService.createProducts(
-            orderingAccessToken,
-            orderingBusinessId,
-            newCategory.id,
-            product,
-          );
-          // Format product id
-          const newProductId =
-            typeof newProduct.id === 'number' ? newProduct.id.toString() : newProduct.id;
+    //     // Create products
+    //     category.products.map(async (product: any) => {
+    //       // Create product
+    //       const newProduct = await this.orderingService.createProducts(
+    //         orderingAccessToken,
+    //         orderingBusinessId,
+    //         newCategory.id,
+    //         product,
+    //       );
+    //       // Format product id
+    //       const newProductId =
+    //         typeof newProduct.id === 'number' ? newProduct.id.toString() : newProduct.id;
 
-          if (product.options.length === 0 || product.option_bindings.length === 0) {
-            return;
-          }
+    //       if (product.options.length === 0 || product.option_bindings.length === 0) {
+    //         return;
+    //       }
 
-          let hasMatch = false;
+    //       let hasMatch = false;
 
-          for (const productOption of product.options) {
-            const hasMatchingOption: boolean = extrasParentObj.options.some(
-              (extrasOption: any) => extrasOption.id === productOption.id,
-            );
+    //       for (const productOption of product.options) {
+    //         const hasMatchingOption: boolean = extrasParentObj.options.some(
+    //           (extrasOption: any) => extrasOption.id === productOption.id,
+    //         );
 
-            if (hasMatchingOption) {
-              hasMatch = true;
-              break;
-            }
-          }
-          if (hasMatch) {
-            // Edit product (add extras to product)
-            await this.orderingService.editProduct(
-              orderingAccessToken,
-              orderingBusinessId,
-              newCategoryId,
-              newProductId,
-              {
-                extras: `[${extrasParentObj.id}]`,
-              },
-            );
-          }
+    //         if (hasMatchingOption) {
+    //           hasMatch = true;
+    //           break;
+    //         }
+    //       }
+    //       if (hasMatch) {
+    //         // Edit product (add extras to product)
+    //         await this.orderingService.editProduct(
+    //           orderingAccessToken,
+    //           orderingBusinessId,
+    //           newCategoryId,
+    //           newProductId,
+    //           {
+    //             extras: `[${extrasParentObj.id}]`,
+    //           },
+    //         );
+    //       }
 
-          return;
-        });
-      });
+    //       return;
+    //     });
+    //   });
 
-      return orderingCategoryData;
-    }
+    //   return orderingCategoryData;
+    // }
 
     return woltMenuData;
   }
@@ -250,13 +258,13 @@ export class MenuService {
 
     // Sync menu data from ordering to Wolt to have the same product id
 
-    if (business.provider.length > 0) {
-      await this.providerMangementService.syncProviderMenu(
-        business.provider,
-        orderingUserId,
-        categoryData,
-      );
-    }
+    // if (business.provider.length > 0) {
+    //   await this.providerMangementService.syncProviderMenu(
+    //     business.provider,
+    //     orderingUserId,
+    //     categoryData,
+    //   );
+    // }
 
     return mappedCategoryData;
   }
@@ -291,7 +299,6 @@ export class MenuService {
       orderingAccessToken,
       business.orderingBusinessId,
     );
-    console.log('🚀 ~ MenuService ~ getBusinessProductOption ~ extrasData:', extrasData);
 
     const optionsData = extrasData.flatMap((extra) => extra.options);
 
@@ -333,69 +340,144 @@ export class MenuService {
     });
   }
 
-  async setBusinessProductStatus(
-    orderingUserId: number,
-    bodyData: ValidatedProductBody,
-    categoryId: string,
-    productId: string,
-  ) {
+  async editBusinessCategory(orderingUserId: number, bodyData: ValidatedCategoryBody) {
+    // Extract catgegory data from body
+    const { data: categories } = bodyData;
+
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
-    const business = await this.businessService.findBusinessByPublicId(bodyData.publicBusinessId);
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
 
     const orderingBusinessId = business.orderingBusinessId;
 
-    const data = {
-      enabled: bodyData.enabled,
-    };
+    categories.forEach(async (category) => {
+      const { id, ...updatedCategory } = category;
 
-    await this.orderingService.editProduct(
-      orderingAccessToken,
-      orderingBusinessId,
-      categoryId,
-      productId,
-      data,
-    );
-
-    // Edit the product on other providers
-    if (business.provider.length > 0) {
-      await this.providerMangementService.editProduct(
-        business.provider,
-        productId,
-        orderingUserId,
-        bodyData,
+      await this.orderingService.editCategory(
+        orderingAccessToken,
+        orderingBusinessId,
+        category.id.toString(),
+        updatedCategory,
       );
-    }
+    });
 
     return {
       message: 'Success',
     };
   }
 
-  async setBusinessCategoryStatus(
-    orderingUserId: number,
-    bodyData: ValidatedProductBody,
-    categoryId: string,
-  ) {
+  async editBusinessProduct(orderingUserId: number, bodyData: ValidatedProductBody) {
+    // Extract catgegory data from body
+    const { data: products } = bodyData;
+
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
-    const business = await this.businessService.findBusinessByPublicId(bodyData.publicBusinessId);
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
 
     const orderingBusinessId = business.orderingBusinessId;
 
-    const data = {
-      enabled: bodyData.enabled,
-    };
+    products.forEach(async (product) => {
+      const { categoryId, id, images, ...updatedProduct } = product;
 
-    await this.orderingService.editCategory(
-      orderingAccessToken,
-      orderingBusinessId,
-      categoryId,
-      data,
-    );
+      await this.orderingService.editProduct(
+        orderingAccessToken,
+        orderingBusinessId,
+        product.categoryId.toString(),
+        product.id.toString(),
+        updatedProduct,
+      );
+    });
 
     return {
       message: 'Success',
     };
+  }
+
+  async editBusinessSuboption(orderingUserId: number, bodyData: ValidatedSuboptionBody) {
+    // Extract catgegory data from body
+    const { data: suboptions } = bodyData;
+
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    suboptions.forEach(async (suboption) => {
+      const { extraOptionId: optionId, extraId, id: suboptionId, ...updatedSuboptions } = suboption;
+
+      await this.orderingService.editProductSuboptions(
+        orderingAccessToken,
+        orderingBusinessId,
+        extraId,
+        optionId.toString(),
+        suboptionId.toString(),
+        updatedSuboptions,
+      );
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async createMenuSynchronizationTracking(bodyData: ValidatedMenuTrackingBody) {
+    // Extract catgegory data from body
+    const { businessPublicId, timeSynchronize, type } = bodyData;
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    // Create tracking
+    const data = Prisma.validator<Prisma.MenuTrackingUncheckedCreateInput>()({
+      name: `${business.name} menu tracking`,
+      synchronizeTime: timeSynchronize,
+      type: type,
+      businessPublicId: businessPublicId,
+    });
+
+    await this.prismaService.menuTracking.upsert({
+      where: {
+        businessPublicId: businessPublicId,
+      },
+      create: data,
+      update: data,
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  @Cron(CronExpression.EVERY_SECOND)
+  async onMenuTracking() {
+    const menuQueue = await this.prismaService.menuTracking.findMany({
+      take: 10,
+      where: {
+        synchronizeTime: {
+          gt: new Date().toISOString(), // Use the current date and time for comparison
+        },
+      },
+    });
+
+    menuQueue.forEach(async (queue) => {
+      const calulateTime = moment().diff(queue.synchronizeTime, 'minutes');
+      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calulateTime);
+      this.logger.log(`Tracking menu for ${queue.name}`);
+      if (calulateTime >= 0 && !queue.onCooldown) {
+        const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
+
+        await this.providerMangementService.menuTracking(queue, business);
+      }
+    });
+  }
+
+  async getTrackingData(publicBusinessId: string) {
+    return this.prismaService.menuTracking.findUnique({
+      where: {
+        businessPublicId: publicBusinessId,
+      },
+    });
   }
 }
