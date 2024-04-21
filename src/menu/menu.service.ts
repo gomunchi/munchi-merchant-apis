@@ -253,18 +253,10 @@ export class MenuService {
       business.orderingBusinessId,
     );
 
+    // Check if onCooldown or not. if it is change onCooldown to false
+
     //Format category data to product data
     const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
-
-    // Sync menu data from ordering to Wolt to have the same product id
-
-    // if (business.provider.length > 0) {
-    //   await this.providerMangementService.syncProviderMenu(
-    //     business.provider,
-    //     orderingUserId,
-    //     categoryData,
-    //   );
-    // }
 
     return mappedCategoryData;
   }
@@ -463,7 +455,6 @@ export class MenuService {
 
     menuQueue.forEach(async (queue) => {
       const calulateTime = moment().diff(queue.synchronizeTime, 'minutes');
-      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calulateTime);
       this.logger.log(`Tracking menu for ${queue.name}`);
       if (calulateTime >= 0 && !queue.onCooldown) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
@@ -474,10 +465,16 @@ export class MenuService {
   }
 
   async getTrackingData(publicBusinessId: string) {
-    return this.prismaService.menuTracking.findUnique({
+    const menuTracking = this.prismaService.menuTracking.findUnique({
       where: {
         businessPublicId: publicBusinessId,
       },
     });
+
+    if (!menuTracking) {
+      return null;
+    }
+
+    return menuTracking;
   }
 }
