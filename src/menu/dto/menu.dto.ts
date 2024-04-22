@@ -53,11 +53,11 @@ export class ValidatedSuboptionBody extends ValidatedBusinessId {
 export class ValidatedMenuTrackingBody extends ValidatedBusinessId {
   @IsNotEmpty()
   @IsString()
-  type:string;
+  type: string;
 
   @IsNotEmpty()
   @IsString()
-  timeSynchronize:string;
+  timeSynchronize: string;
 }
 
 export class ValidatedProductId {
