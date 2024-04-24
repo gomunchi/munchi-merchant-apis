@@ -27,6 +27,14 @@ export class MenuController {
   constructor(private menuService: MenuService) {}
 
   @UseGuards(JwtGuard)
+  @Get('wolt')
+  getWoltMenu(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getWoltMenu(orderingUserId, businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
   @Get('category')
   getMenuCategory(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
     const { orderingUserId } = request.user;

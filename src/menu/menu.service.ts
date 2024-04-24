@@ -442,6 +442,29 @@ export class MenuService {
     };
   }
 
+  async getWoltMenu(orderingUserId: number, businessPublicId: string) {
+    const business = await this.businessService.findBusinessByPublicId(businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    if (!business.provider || business.provider.length === 0) {
+      throw new NotFoundException('No provider associate with this business');
+    }
+
+    // Get wolt Venue
+    const woltVenue = business.provider.filter(
+      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+    );
+
+    // Get wolt Menu data
+    const woltMenuData: MenuData = await this.woltService.getMenuCategory(
+      orderingUserId,
+      woltVenue[0].providerId,
+    );
+
+    return woltMenuData;
+  }
+
   @Cron(CronExpression.EVERY_5_SECONDS)
   async onMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
@@ -453,13 +476,12 @@ export class MenuService {
       },
     });
 
-    this.logger.log(`Checking business meny synchronization process`);
-
     menuQueue.forEach(async (queue) => {
       const calulateTime = moment().diff(queue.synchronizeTime, 'minutes');
-    
+      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calulateTime);
+
       this.logger.log(`${queue.name}`);
-      if (calulateTime >= 0) {
+      if (calulateTime) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
