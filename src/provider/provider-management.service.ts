@@ -11,7 +11,10 @@ import { AvailableProvider, ProviderEnum } from './provider.type';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
 import { OrderingOrder } from './ordering/dto/ordering-order.dto';
-import { OrderingMenuCategory } from './ordering/dto/ordering-menu.dto';
+import {
+  OrderingCategoryProductExtra,
+  OrderingMenuCategory,
+} from './ordering/dto/ordering-menu.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -124,13 +127,17 @@ export class ProviderManagmentService {
       .rejectOrder(orderingUserId, orderId, orderRejectData);
   }
 
-  async syncProviderMenu(providers: Provider[], orderingMenuData: OrderingMenuCategory[]) {
+  async syncProviderMenu(
+    providers: Provider[],
+    orderingMenuData: OrderingMenuCategory[],
+    orderingMenuExtraData: OrderingCategoryProductExtra[],
+  ) {
     // This will sync other provider menu except Ordering
     if (providers.length > 0) {
       providers.forEach((provider) => {
         return this.moduleRef
           .get(`${provider.name}Service`)
-          .syncMenu(provider.providerId, orderingMenuData);
+          .syncMenu(provider.providerId, orderingMenuData, orderingMenuExtraData);
       });
     }
   }
@@ -185,12 +192,18 @@ export class ProviderManagmentService {
       orderingApiKey.value,
     );
 
+    const menuOptionData = await this.orderingService.getProductExtras(
+      '',
+      business.orderingBusinessId,
+      orderingApiKey.value,
+    );
+
     const { provider: providers } = business;
-    
+
     if (providers.length > 0) {
       this.logger.log(`Synchronizing provider menu data of ${business.name}`);
 
-      await this.syncProviderMenu(providers, menuData);
+      await this.syncProviderMenu(providers, menuData, menuOptionData);
 
       await this.prismaService.menuTracking.update({
         where: {
