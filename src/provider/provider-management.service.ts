@@ -184,12 +184,15 @@ export class ProviderManagmentService {
       business.orderingBusinessId,
       orderingApiKey.value,
     );
-    const { provider: providers } = business;
 
+    const { provider: providers } = business;
+    
     if (providers.length > 0) {
+      this.logger.log(`Synchronizing provider menu data of ${business.name}`);
+
       await this.syncProviderMenu(providers, menuData);
 
-      this.prismaService.menuTracking.update({
+      await this.prismaService.menuTracking.update({
         where: {
           businessPublicId: business.publicId,
         },
