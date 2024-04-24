@@ -29,7 +29,10 @@ import { WoltOrderMapperService } from './wolt-order-mapper';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltSyncService } from './wolt-sync';
 import { WoltMenuData } from './dto/wolt-menu.dto';
-import { OrderingMenuCategory } from '../ordering/dto/ordering-menu.dto';
+import {
+  OrderingCategoryProductExtra,
+  OrderingMenuCategory,
+} from '../ordering/dto/ordering-menu.dto';
 import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { MenuItemBodyData } from './wolt.type';
 
@@ -480,13 +483,8 @@ export class WoltService implements ProviderService {
     }
   }
 
-  async editProduct(
-    woltVenueId: string,
-    externalProductId: string,
-    orderingUserId: number,
-    bodyData: any,
-  ) {
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+  async editProduct(woltVenueId: string, woltEditBodyData: unknown) {
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'venueId');
 
     const option = {
       method: 'PATCH',
@@ -496,15 +494,34 @@ export class WoltService implements ProviderService {
         password: woltCredentials.password,
       },
       data: {
-        data: [
-          {
-            external_id: externalProductId,
-            enabled: bodyData.enabled,
-          },
-        ],
+        data: woltEditBodyData,
       },
     };
-    console.log('🚀 ~ WoltService ~ option:', option.data);
+
+    try {
+      const response = await axios.request(option);
+
+      return response.data;
+    } catch (error: any) {
+      console.log(error.response ? error.response.data : error.message);
+      throw new ForbiddenException(error.response ? error.response.data : error.message);
+    }
+  }
+
+  async editMenuOption(woltVenueId: string, woltOptionBodyData: unknown) {
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'venueId');
+
+    const option = {
+      method: 'PATCH',
+      baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/options/values`,
+      auth: {
+        username: woltCredentials.username,
+        password: woltCredentials.password,
+      },
+      data: {
+        data: woltOptionBodyData,
+      },
+    };
 
     try {
       const response = await axios.request(option);
@@ -569,7 +586,72 @@ export class WoltService implements ProviderService {
     }
   }
 
-  async syncMenu(woltVenueId: string, orderingMenuData: OrderingMenuCategory[]) {
+  async syncMenu(
+    woltVenueId: string,
+    orderingMenuData: OrderingMenuCategory[],
+    orderingMenuOption: OrderingCategoryProductExtra[],
+  ) {
+    //Check category if there is false
+
+    const updatedMenuData = orderingMenuData.flatMap((category) => {
+      // Create a copy of the products array to avoid mutation
+      const updatedProducts = category.products.map((product) => ({
+        external_id: product.id,
+        enabled: category.enabled === false ? false : product.enabled,
+      }));
+
+      // Include product data only if the category is enabled or the product has an explicit enabled value
+      return category.enabled || updatedProducts.some((p) => p.enabled !== undefined)
+        ? updatedProducts
+        : [];
+    });
+
+    // Synchronizing product
+    await this.editProduct(woltVenueId, updatedMenuData);
+
+    // Synchronizing option
+
+    const formattedOption = orderingMenuOption.flatMap((extra) => {
+      // Filter enabled options
+      const enabledOptions = extra.options.filter((option) => option.enabled);
+
+      // Extract enabled suboptions from each enabled option
+      const filteredSuboptions = enabledOptions.flatMap((option) =>
+        option.suboptions.map((suboption) => ({
+          external_id: suboption.id,
+          enabled: suboption.enabled,
+        })),
+      );
+
+      // Return the filtered suboptions array (or an empty array if no enabled options)
+      return filteredSuboptions;
+    });
+    console.log('🚀 ~ WoltService ~ formattedOption ~ formattedOption:', formattedOption);
+
+    await this.editMenuOption(woltVenueId, formattedOption);
+  }
+
+  async syncProduct(woltVenueId: string, orderingMenuData: OrderingMenuCategory[]) {
+    const result: WoltMenuCategory[] = orderingMenuData
+      .map((orderingCategory: OrderingMenuCategory) => {
+        if (orderingCategory.products.length === 0) {
+          return undefined; // Returns undefined
+        }
+        return this.orderingMenuMapperService.mapToWoltCategory(orderingCategory);
+      })
+      .filter(Boolean);
+
+    const woltMenuData: WoltMenuData = {
+      id: this.utilsService.generatePublicId(),
+      currency: 'EUR',
+      primary_language: 'en',
+      categories: result,
+    };
+
+    await this.createMenu(woltVenueId, woltMenuData);
+  }
+
+  async syncProductOption(woltVenueId: string, orderingMenuData: OrderingMenuCategory[]) {
     const result: WoltMenuCategory[] = orderingMenuData
       .map((orderingCategory: OrderingMenuCategory) => {
         if (orderingCategory.products.length === 0) {
