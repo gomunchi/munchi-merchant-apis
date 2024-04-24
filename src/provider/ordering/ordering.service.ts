@@ -764,7 +764,7 @@ export class OrderingService implements ProviderService {
     }
   }
 
-  async getProductExtras(orderingAccessToken: string, orderingBusinessId: string) {
+  async getProductExtras(orderingAccessToken: string, orderingBusinessId: string, apiKey?: string) {
     const options = {
       method: 'GET',
       url: this.utilService.getEnvUrl('business', `${orderingBusinessId}/extras`),
@@ -773,6 +773,10 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${orderingAccessToken}`,
       },
     };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
 
     try {
       const response = await axios.request(options);
