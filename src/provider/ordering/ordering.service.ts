@@ -579,7 +579,7 @@ export class OrderingService implements ProviderService {
     orderingAccessToken: string,
     orderingBusinessId: string,
     categoryId: string,
-    data: Object,
+    data: unknown,
   ) {
     const options = {
       method: 'POST',
@@ -656,7 +656,7 @@ export class OrderingService implements ProviderService {
     orderingBusinessId: string,
     categoryId: string,
     productId: string,
-    data: Object,
+    data: unknown,
   ) {
     const options = {
       method: 'POST',
@@ -685,7 +685,7 @@ export class OrderingService implements ProviderService {
     extraId: string,
     optionId: string,
     suboptionId: string,
-    data: Object,
+    data: unknown,
   ) {
     const options = {
       method: 'PUT',
