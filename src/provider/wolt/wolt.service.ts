@@ -528,7 +528,6 @@ export class WoltService implements ProviderService {
 
       return response.data;
     } catch (error: any) {
-      console.log(error.response ? error.response.data : error.message);
       throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
@@ -549,39 +548,6 @@ export class WoltService implements ProviderService {
 
       return response.data;
     } catch (error: any) {
-      const business = await this.prismaService.provider.findUnique({
-        where: {
-          providerId: woltVenueId,
-        },
-        include: {
-          business: {
-            select: {
-              publicId: true,
-            },
-          },
-        },
-      });
-
-      const menuTracking = await this.prismaService.menuTracking.findUnique({
-        where: {
-          businessPublicId: business.business.publicId,
-        },
-      });
-
-      const nextSynchronizeTime = moment(menuTracking.lastUpdated)
-        .add(this.woltMenuApiDelayTime, 'minutes')
-        .toISOString();
-
-      //Set Menu tracking to cooldown
-      this.prismaService.menuTracking.update({
-        where: {
-          businessPublicId: business.business.publicId,
-        },
-        data: {
-          onCooldown: true,
-          synchronizeTime: nextSynchronizeTime,
-        },
-      });
       throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
@@ -606,9 +572,6 @@ export class WoltService implements ProviderService {
         : [];
     });
 
-    // Synchronizing product
-    await this.editProduct(woltVenueId, updatedMenuData);
-
     // Synchronizing option
 
     const formattedOption = orderingMenuOption.flatMap((extra) => {
@@ -626,9 +589,17 @@ export class WoltService implements ProviderService {
       // Return the filtered suboptions array (or an empty array if no enabled options)
       return filteredSuboptions;
     });
-    console.log('🚀 ~ WoltService ~ formattedOption ~ formattedOption:', formattedOption);
 
-    await this.editMenuOption(woltVenueId, formattedOption);
+    try {
+      // Synchronizing product
+      await this.editProduct(woltVenueId, updatedMenuData);
+
+      // Synchronizing product option
+      await this.editMenuOption(woltVenueId, formattedOption);
+    } catch (error) {
+      await this.menuApiCallBack(woltVenueId);
+      this.handleWoltError(error);
+    }
   }
 
   async syncProduct(woltVenueId: string, orderingMenuData: OrderingMenuCategory[]) {
@@ -671,6 +642,42 @@ export class WoltService implements ProviderService {
     await this.createMenu(woltVenueId, woltMenuData);
   }
 
+  async menuApiCallBack(woltVenueId: string) {
+    const business = await this.prismaService.provider.findUnique({
+      where: {
+        providerId: woltVenueId,
+      },
+      include: {
+        business: {
+          select: {
+            publicId: true,
+          },
+        },
+      },
+    });
+
+    const menuTracking = await this.prismaService.menuTracking.findUnique({
+      where: {
+        businessPublicId: business.business.publicId,
+      },
+    });
+
+    const nextSynchronizeTime = moment(menuTracking.lastUpdated)
+      .add(this.woltMenuApiDelayTime, 'minutes')
+      .toISOString();
+
+    //Set Menu tracking to cooldown
+    this.prismaService.menuTracking.update({
+      where: {
+        businessPublicId: business.business.publicId,
+      },
+      data: {
+        onCooldown: true,
+        synchronizeTime: nextSynchronizeTime,
+      },
+    });
+  }
+
   generateWoltUpdateEndPoint(orderStatus: AvailableOrderStatus, woltOrderFromDb: OrderResponse) {
     if (orderStatus === OrderStatusEnum.PREORDER) {
       return 'confirm-preorder';
@@ -688,5 +695,15 @@ export class WoltService implements ProviderService {
     } else {
       return '';
     }
+  }
+
+  async handleWoltError(error: any) {
+    if (error.response) {
+      this.logger.error(error.response.data);
+
+      throw new ForbiddenException(error.response.data, error.response.status);
+    }
+
+    throw new ForbiddenException(error);
   }
 }
