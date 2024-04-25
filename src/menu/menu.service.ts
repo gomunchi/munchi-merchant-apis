@@ -246,14 +246,14 @@ export class MenuService {
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
     const categoryData = await this.orderingService.getMenuCategory(
       orderingAccessToken,
       business.orderingBusinessId,
     );
-
-    // Check if onCooldown or not. if it is change onCooldown to false
 
     //Format category data to product data
     const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
@@ -477,11 +477,11 @@ export class MenuService {
     });
 
     menuQueue.forEach(async (queue) => {
-      const calulateTime = moment().diff(queue.synchronizeTime, 'minutes');
-      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calulateTime);
+      const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
+      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calculatedTime);
 
       this.logger.log(`${queue.name}`);
-      if (calulateTime) {
+      if (calculatedTime >= 0) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
