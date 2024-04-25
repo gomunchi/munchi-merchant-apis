@@ -16,6 +16,7 @@ import {
   OrderingMenuCategory,
 } from './ordering/dto/ordering-menu.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import moment from 'moment';
 
 @Injectable()
 export class ProviderManagmentService {
@@ -211,6 +212,7 @@ export class ProviderManagmentService {
         },
         data: {
           onCooldown: false,
+          lastUpdated: moment().toISOString(),
         },
       });
     }
