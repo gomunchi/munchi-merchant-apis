@@ -504,7 +504,8 @@ export class WoltService implements ProviderService {
       return response.data;
     } catch (error: any) {
       console.log(error.response ? error.response.data : error.message);
-      throw new ForbiddenException(error.response ? error.response.data : error.message);
+      this.menuApiCallBack(woltVenueId);
+      // throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
 
@@ -597,6 +598,7 @@ export class WoltService implements ProviderService {
       // Synchronizing product option
       await this.editMenuOption(woltVenueId, formattedOption);
     } catch (error) {
+      console.log('🚀 ~ WoltService ~ error:', error);
       await this.menuApiCallBack(woltVenueId);
       this.handleWoltError(error);
     }
@@ -643,6 +645,7 @@ export class WoltService implements ProviderService {
   }
 
   async menuApiCallBack(woltVenueId: string) {
+    console.log('Executing callback process');
     const business = await this.prismaService.provider.findUnique({
       where: {
         providerId: woltVenueId,
@@ -667,7 +670,7 @@ export class WoltService implements ProviderService {
       .toISOString();
 
     //Set Menu tracking to cooldown
-    this.prismaService.menuTracking.update({
+    await this.prismaService.menuTracking.update({
       where: {
         businessPublicId: business.business.publicId,
       },
