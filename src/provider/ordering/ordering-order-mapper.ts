@@ -58,6 +58,10 @@ export class OrderingOrderMapperService {
       ? moment.utc(orderingOrder.created_at, inputFormat).local().toISOString(true)
       : null;
 
+    const userName = `${orderingOrder.customer.name ? orderingOrder.customer.name : 'Guest'} ${
+      orderingOrder.customer.lastname ? orderingOrder.customer.lastname : 'User'
+    }`;
+
     return {
       id: orderingOrder.id.toString(),
       orderId: orderingOrder.id.toString(),
@@ -78,7 +82,7 @@ export class OrderingOrderMapperService {
         total: total.toString(), // This should be equal to subtotal as we don't need delivery fee
       },
       customer: {
-        name: `${orderingOrder.customer.name} ${orderingOrder.customer.lastname}`,
+        name: userName,
         phone: orderingOrder.customer.cellphone,
       },
       deliveryEta: deliveryDatetime,
