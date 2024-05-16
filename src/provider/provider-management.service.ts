@@ -205,16 +205,6 @@ export class ProviderManagmentService {
       this.logger.log(`Synchronizing provider menu data of ${business.name}`);
 
       await this.syncProviderMenu(providers, menuData, menuOptionData);
-
-      await this.prismaService.menuTracking.update({
-        where: {
-          businessPublicId: business.publicId,
-        },
-        data: {
-          onCooldown: false,
-          lastUpdated: moment().toISOString(),
-        },
-      });
     }
   }
 }
