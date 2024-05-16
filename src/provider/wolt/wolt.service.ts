@@ -602,7 +602,6 @@ export class WoltService implements ProviderService {
 
       this.logger.log('Succesfully synchronize business data, should fall back to normal state');
     } catch (error) {
-      console.log('🚀 ~ WoltService ~ error:', error);
       await this.menuApiCallBack(woltVenueId, 'cooldown');
       this.handleWoltError(error);
     }
@@ -685,8 +684,6 @@ export class WoltService implements ProviderService {
       updateData.synchronizeTime = nextSynchronizeTime;
     }
 
-    console.log('🚀 ~ WoltService ~ menuApiCallBack ~ updateData:', updateData);
-
     await this.prismaService.menuTracking.update({
       where: {
         businessPublicId: business.business.publicId,
@@ -721,6 +718,7 @@ export class WoltService implements ProviderService {
       throw new ForbiddenException(error.response.data, error.response.status);
     }
 
+    this.logger.error(error);
     throw new ForbiddenException(error);
   }
 }

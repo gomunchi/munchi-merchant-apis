@@ -480,8 +480,6 @@ export class MenuService {
 
     menuQueue.forEach(async (queue) => {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
-      console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calculatedTime);
-
       this.logger.log(`${queue.name}`);
       if (calculatedTime === 0 && queue.processing) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
@@ -497,7 +495,6 @@ export class MenuService {
         businessPublicId: publicBusinessId,
       },
     });
-    console.log('🚀 ~ MenuService ~ getTrackingData ~ menuTracking:', menuTracking);
 
     if (!menuTracking) {
       return {
