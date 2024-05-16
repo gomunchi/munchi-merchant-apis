@@ -258,6 +258,8 @@ export class MenuService {
     //Format category data to product data
     const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
 
+    // TODO: can add cached here
+
     return mappedCategoryData;
   }
 
@@ -481,7 +483,7 @@ export class MenuService {
       console.log('🚀 ~ MenuService ~ menuQueue.forEach ~ calulateTime:', calculatedTime);
 
       this.logger.log(`${queue.name}`);
-      if (calculatedTime >= 0) {
+      if (calculatedTime === 0 && queue.processing) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
@@ -490,14 +492,17 @@ export class MenuService {
   }
 
   async getTrackingData(publicBusinessId: string) {
-    const menuTracking = this.prismaService.menuTracking.findUnique({
+    const menuTracking = await this.prismaService.menuTracking.findUnique({
       where: {
         businessPublicId: publicBusinessId,
       },
     });
+    console.log('🚀 ~ MenuService ~ getTrackingData ~ menuTracking:', menuTracking);
 
     if (!menuTracking) {
-      return null;
+      return {
+        message: 'No tracking at the moment',
+      };
     }
 
     return menuTracking;

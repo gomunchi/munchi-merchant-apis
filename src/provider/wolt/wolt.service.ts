@@ -504,7 +504,7 @@ export class WoltService implements ProviderService {
       return response.data;
     } catch (error: any) {
       console.log(error.response ? error.response.data : error.message);
-      this.menuApiCallBack(woltVenueId);
+      this.menuApiCallBack(woltVenueId, 'cooldown');
       // throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
@@ -597,9 +597,13 @@ export class WoltService implements ProviderService {
 
       // Synchronizing product option
       await this.editMenuOption(woltVenueId, formattedOption);
+
+      await this.menuApiCallBack(woltVenueId, 'success');
+
+      this.logger.log('Succesfully synchronize business data, should fall back to normal state');
     } catch (error) {
       console.log('🚀 ~ WoltService ~ error:', error);
-      await this.menuApiCallBack(woltVenueId);
+      await this.menuApiCallBack(woltVenueId, 'cooldown');
       this.handleWoltError(error);
     }
   }
@@ -644,7 +648,7 @@ export class WoltService implements ProviderService {
     await this.createMenu(woltVenueId, woltMenuData);
   }
 
-  async menuApiCallBack(woltVenueId: string) {
+  async menuApiCallBack(woltVenueId: string, state: 'success' | 'cooldown') {
     console.log('Executing callback process');
     const business = await this.prismaService.provider.findUnique({
       where: {
@@ -669,15 +673,25 @@ export class WoltService implements ProviderService {
       .add(this.woltMenuApiDelayTime, 'minutes')
       .toISOString();
 
-    //Set Menu tracking to cooldown
+    const updateData: Prisma.MenuTrackingUncheckedUpdateInput = {
+      processing: false, // Always update processing regardless of state
+      onCooldown: false,
+      lastUpdated: moment().toISOString(),
+    };
+
+    if (state === 'cooldown') {
+      updateData.processing = true;
+      updateData.onCooldown = true;
+      updateData.synchronizeTime = nextSynchronizeTime;
+    }
+
+    console.log('🚀 ~ WoltService ~ menuApiCallBack ~ updateData:', updateData);
+
     await this.prismaService.menuTracking.update({
       where: {
         businessPublicId: business.business.publicId,
       },
-      data: {
-        onCooldown: true,
-        synchronizeTime: nextSynchronizeTime,
-      },
+      data: updateData,
     });
   }
 
