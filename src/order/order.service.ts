@@ -65,7 +65,8 @@ export class OrderService {
     }
   }
 
-  async updateOrder(orderingUserId: number, orderId: string, orderData: OrderData) {
+  async updateOrder(sessionPublicId:string, orderingUserId: number, orderId: string, orderData: OrderData) {
+
     if (!orderData || Object.values(orderData).some((value) => value === null)) {
       throw new NotFoundException('Not enough data');
     }
@@ -75,6 +76,8 @@ export class OrderService {
     if (!validProvider) {
       throw new NotFoundException('No provider found');
     }
+
+    const businesses = await this.businessService.getBusinessInSession(sessionPublicId)
 
     try {
       //Update order base on provider
@@ -86,6 +89,7 @@ export class OrderService {
           orderStatus: orderData.orderStatus,
           preparedIn: orderData.preparedIn,
         },
+        businesses
       );
 
       return order;

@@ -47,9 +47,9 @@ export class OrderController {
     @Body() orderData: OrderData,
     @Request() req: any,
   ) {
-    const { orderingUserId } = req.user;
+    const { orderingUserId, sessionPublicId } = req.user;
 
-    return this.orderService.updateOrder(orderingUserId, orderId, orderData);
+    return this.orderService.updateOrder(sessionPublicId, orderingUserId, orderId, orderData);
   }
 
   @Put(':orderId/reject')
