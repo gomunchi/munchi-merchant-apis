@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { Business, Prisma } from '@prisma/client';
 import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus } from '../order/dto/order.dto';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
@@ -100,10 +100,39 @@ export class ProviderManagmentService {
       orderStatus: AvailableOrderStatus;
       preparedIn: string;
     },
+    businesses: unknown,
   ) {
+    console.log('🚀 ~ ProviderManagmentService ~ provider:', provider);
+
+    if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
+      throw new BadRequestException(
+        `Something wrong happened: updateOrder() at 108, ${ProviderManagmentService.name}`,
+      );
+    }
+
+    // Default provider
+    if (provider === ProviderEnum.Munchi) {
+      return this.orderingService.updateOrder(orderingUserId, orderId, updateData);
+    }
+
+    let providerInfo: unknown = {};
+
+    businesses.map((business) => {
+      // business.provider.map((provider) => provider.name === provider)
+      const filterProvider = business.provider.filter((p: any) => p.name === provider);
+      if (provider.length > 0) {
+        providerInfo = filterProvider[0];
+      } else {
+        throw new BadRequestException(
+          `Something wrong happened: updateOrder() at 125, ${ProviderManagmentService.name}`,
+        );
+      }
+    });
+
+    // Dynamic provider
     return this.moduleRef
       .get(`${provider}Service`)
-      .updateOrder(orderingUserId, orderId, updateData);
+      .updateOrder(orderingUserId, orderId, updateData, providerInfo);
   }
 
   async rejectOrder(
