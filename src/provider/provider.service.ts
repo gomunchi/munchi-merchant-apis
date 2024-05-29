@@ -4,6 +4,7 @@ import { OrderData } from 'src/type';
 
 import { ProviderOrder } from './provider.type';
 import { OrderingOrder } from './ordering/dto/ordering-order.dto';
+import { Provider } from '@prisma/client';
 
 @Injectable()
 export abstract class ProviderService {
@@ -20,6 +21,7 @@ export abstract class ProviderService {
     orderingUserId: number,
     orderId: string,
     orderData: Omit<OrderData, 'provider'>,
+    providerInfor?:Provider
   ): Promise<OrderingOrder | OrderResponse>;
 
   abstract rejectOrder(
@@ -28,5 +30,6 @@ export abstract class ProviderService {
     orderRejectData: {
       reason: string;
     },
+    providerInfor?:Provider
   ): Promise<OrderingOrder | OrderResponse>;
 }
