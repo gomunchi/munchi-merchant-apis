@@ -1,6 +1,12 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, ProviderCredential } from '@prisma/client';
+import { Prisma, Credential, Provider } from '@prisma/client';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -60,77 +66,37 @@ export class WoltService implements ProviderService {
     return orders;
   }
 
-  async getWoltCredentials(
-    keyLookupValue: string | number,
-    lookupType: 'orderingUserId' | 'venueId',
-  ) {
-    let woltCredentials: ProviderCredential; // API Keys are typically strings
+  async getWoltCredentials(woltVenueId: string, apiType: 'order' | 'menu') {
+    let woltCredentials: {
+      data: unknown;
+    }; // API Keys are typically strings
 
-    if (lookupType === 'orderingUserId' && typeof keyLookupValue === 'number') {
-      woltCredentials = await this.getCredentialByOrderingUserId(keyLookupValue);
-    } else if (lookupType === 'venueId' && typeof keyLookupValue === 'string') {
-      woltCredentials = await this.getCredentialByVenueId(keyLookupValue);
+    const providerInputArgs = Prisma.validator<Prisma.ProviderFindUniqueArgs>()({
+      where: {
+        id: woltVenueId,
+      },
+      include: {
+        credentials: true,
+      },
+    });
+
+    const provider = await this.prismaService.provider.findUnique(providerInputArgs);
+
+    if (apiType === 'order') {
+      woltCredentials = provider.credentials.find(
+        (credential) => credential.name === 'Order' && credential.type === 'api-key',
+      ) as any;
     } else {
-      throw new Error('Invalid lookupType or keyLookupValue type provided');
+      woltCredentials = provider.credentials.find(
+        (credential) => credential.name === 'Menu' && credential.type === 'basic-auth',
+      ) as any;
     }
 
-    return woltCredentials;
-  }
-
-  async getCredentialByOrderingUserId(orderingUserId: number): Promise<ProviderCredential> {
-    const user = await this.prismaService.user.findUnique({
-      where: {
-        orderingUserId: orderingUserId,
-      },
-      include: {
-        providerCredentials: true,
-      },
-    });
-
-    if (!user.providerCredentialsId || !user.providerCredentials) {
-      throw new NotFoundException('No provider found associated with user.');
+    if (!woltCredentials) {
+      throw new BadRequestException(`Can't get wolt credentials from database`);
     }
 
-    return user.providerCredentials;
-  }
-
-  async getCredentialByVenueId(venueId: string): Promise<ProviderCredential> {
-    const provider = await this.prismaService.provider.findUnique({
-      where: {
-        providerId: venueId,
-      },
-      include: {
-        business: {
-          include: {
-            owners: {
-              include: {
-                providerCredentials: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!provider) {
-      throw new NotFoundException('No provider found associated with venue.');
-    }
-
-    const providerCredentialsId = provider.business.owners.filter(
-      (owner) => owner.providerCredentialsId,
-    );
-   
-    const providerCredentials = await this.prismaService.providerCredential.findUnique({
-      where: {
-        id: providerCredentialsId[0].providerCredentialsId,
-      },
-    });
-
-    if (!providerCredentials) {
-      throw new NotFoundException('No provider found associated with user.');
-    }
-
-    return providerCredentials;
+    return woltCredentials.data as any;
   }
 
   /**
@@ -161,16 +127,14 @@ export class WoltService implements ProviderService {
     woltOrderId: string,
     endpoint: string,
     orderType: WoltOrderType,
-    orderingUserId: number,
+    woltApiKey: string,
     updateData?: Omit<OrderData, 'provider'>,
   ) {
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
-
     const option = {
       method: 'PUT',
       baseURL: `${this.woltApiUrl}/orders/${woltOrderId}/${endpoint}`,
       headers: {
-        'WOLT-API-KEY': woltCredentials.apiKey,
+        'WOLT-API-KEY': woltApiKey,
       },
       data:
         endpoint === 'reject'
@@ -193,7 +157,7 @@ export class WoltService implements ProviderService {
         `Error when updating wolt Order with order id:${woltOrderId}. Error: ${error}`,
       );
 
-      await this.syncWoltOrder(woltCredentials.apiKey, woltOrderId);
+      await this.syncWoltOrder(woltApiKey, woltOrderId);
       throw new ForbiddenException(error);
     }
   }
@@ -214,9 +178,12 @@ export class WoltService implements ProviderService {
     orderingUserId: number,
     woltOrderId: string,
     { orderStatus, preparedIn }: Omit<OrderData, 'provider'>,
+    providerInfo: Provider,
   ): Promise<any> {
-    // Get wolt api ley from database
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+    const venueId = providerInfo.id;
+
+    // Get wolt api key from database
+    const woltCredentials = await this.getWoltCredentials(venueId, 'order');
 
     const order = await this.woltRepositoryService.getOrderByIdFromDb(woltOrderId);
 
@@ -239,7 +206,7 @@ export class WoltService implements ProviderService {
         order.orderId,
         updateEndPoint,
         order.type as WoltOrderType,
-        orderingUserId,
+        woltCredentials.value,
         {
           orderStatus: OrderStatusEnum.IN_PROGRESS,
           preparedIn: adjustedPickupTime,
@@ -252,7 +219,7 @@ export class WoltService implements ProviderService {
       ) {
         const maxRetries = 10;
         const retryInterval = 500;
-        const syncPickUpTime = await this.getOrderById(woltCredentials.apiKey, order.orderId);
+        const syncPickUpTime = await this.getOrderById(woltCredentials.value, order.orderId);
         const formattedSyncOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(
           syncPickUpTime,
         );
@@ -269,7 +236,7 @@ export class WoltService implements ProviderService {
         }
 
         if (hasPickupTimeUpdated) {
-          await this.syncWoltOrder(woltCredentials.apiKey, order.orderId);
+          await this.syncWoltOrder(woltCredentials.value, order.orderId);
         }
       }
 
@@ -323,14 +290,19 @@ export class WoltService implements ProviderService {
     orderRejectData: {
       reason: string;
     },
+    providerInfo: Provider,
   ): Promise<any> {
+    const woltVenueId = providerInfo.id;
+
     const order = await this.woltRepositoryService.getOrderByIdFromDb(orderId);
+
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'order');
 
     await this.sendWoltUpdateRequest(
       order.orderId,
       'reject',
       order.type as WoltOrderType,
-      orderingUserId,
+      woltCredentials.value,
       {
         reason: orderRejectData.reason,
         orderStatus: OrderStatusEnum.REJECTED,
@@ -371,13 +343,13 @@ export class WoltService implements ProviderService {
   }
 
   async getWoltBusinessById(woltVenueId: string, orderingUserId: number) {
-    const woltCredentals = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+    const woltCredentals = await this.getWoltCredentials(woltVenueId, 'order');
 
     const option = {
       method: 'GET',
       baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/status`,
       headers: {
-        'WOLT-API-KEY': woltCredentals.apiKey,
+        'WOLT-API-KEY': woltCredentals.value,
       },
     };
     try {
@@ -390,19 +362,14 @@ export class WoltService implements ProviderService {
     }
   }
 
-  async setWoltVenueStatus(
-    woltVenueId: string,
-    orderingUserId: number,
-    status: boolean,
-    time?: string,
-  ) {
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+  async setWoltVenueStatus(woltVenueId: string, status: boolean, time?: Date) {
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'order');
 
     const option = {
       method: 'PATCH',
       baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/online`,
       headers: {
-        'WOLT-API-KEY': woltCredentials.apiKey,
+        'WOLT-API-KEY': woltCredentials.value,
       },
       data: {
         status: status ? 'ONLINE' : 'OFFLINE',
@@ -420,7 +387,7 @@ export class WoltService implements ProviderService {
   }
 
   async getMenuCategory(orderingUserId: number, woltVenueId: string) {
-    const woltCredentials = await this.getWoltCredentials(orderingUserId, 'orderingUserId');
+    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'menu');
 
     try {
       const response = await axios.get(`${this.woltApiUrl}/v2/venues/${woltVenueId}/menu`, {
