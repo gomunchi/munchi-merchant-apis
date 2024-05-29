@@ -84,15 +84,20 @@ export class HistoryService {
       skip: (pageInNumber - 1) * rowPerPageInNumber,
     });
 
-    const totalOrders = await this.orderService.countTotalOrderByArgs(orderArgs);
+    const totalOrderArgs =  Prisma.validator<Prisma.OrderFindManyArgs>()({
+      where: orderArgs.where,
+      include: orderArgs.include,
+    });
+
+    const totalOrders = await this.orderService.getManyOrderByArgs(totalOrderArgs);
 
     const order: OrderResponse[] = await this.orderService.getManyOrderByArgs(orderArgs);
 
-    const analyticsData = await this.financialAnalyticsService.analyzeOrderData(order);
+    const analyticsData = await this.financialAnalyticsService.analyzeOrderData(totalOrders);
 
     return {
       ...analyticsData,
-      totalOrders: totalOrders,
+      totalOrders: totalOrders.length,
       orders: order,
     };
   }
