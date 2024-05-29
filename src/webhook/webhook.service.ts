@@ -127,7 +127,7 @@ export class WebhookService implements OnModuleInit {
   async woltOrderNotification(woltWebhookdata: WoltOrderNotification) {
     const venueId = woltWebhookdata.order.venue_id;
     // Get apiKey by venue id
-    const woltCredentals = await this.woltService.getWoltCredentials(venueId, 'venueId');
+    const woltCredentals = await this.woltService.getWoltCredentials(venueId, 'order');
 
     let woltOrder = await this.woltService.getOrderById(
       woltCredentals.apiKey,
