@@ -42,7 +42,7 @@ export class BusinessService {
     @Inject(forwardRef(() => OrderingService)) private orderingService: OrderingService,
   ) {}
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.MONDAY_TO_FRIDAY_AT_6AM)
   async syncBusinessFromOrdering() {
     const orderingApiKey = await this.prismaService.apiKey.findFirst({
       where: {
@@ -405,19 +405,19 @@ export class BusinessService {
     return (await this.prismaService.business.findUnique(options)) as Prisma.BusinessGetPayload<P>;
   }
 
-  async findBusinessByWoltVenueid(woltVenueId: string) {
-    const provider = await this.prismaService.provider.findUnique({
+  async findBusinessByWoltVenueId(woltVenueId: string) {
+    const provider = await this.prismaService.businessProviders.findUnique({
       where: {
-        id: woltVenueId,
+        providerId: woltVenueId
       },
       include: {
-        businesses: true,
+        business: true
       },
     });
-    if (!provider || !provider.businesses) {
+    if (!provider || !provider.business) {
       throw new NotFoundException('No business found');
     }
-    return provider.businesses[0];
+    return provider.business;
   }
 
   async getAssociateSessions(condition: Prisma.BusinessWhereInput): Promise<
