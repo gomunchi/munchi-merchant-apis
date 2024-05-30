@@ -382,7 +382,11 @@ export class BusinessService {
         publicId: publicBusinessId,
       },
       include: {
-        provider: true,
+        provider: {
+          include:{
+            provider: true
+          }
+        },
       },
     });
   }

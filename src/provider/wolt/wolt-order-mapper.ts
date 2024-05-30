@@ -149,10 +149,14 @@ export class WoltOrderMapperService {
   private async validateBusinessByVenueId(woltVenueId: string) {
     const business = await this.prismaService.provider.findUnique({
       where: {
-        providerId: woltVenueId,
+        id: woltVenueId,
       },
       select: {
-        business: true,
+        businesses:{
+          select:{
+            business: true
+          }
+        }
       },
     });
 
@@ -160,6 +164,6 @@ export class WoltOrderMapperService {
       throw new NotFoundException('No business is associated with this id');
     }
 
-    return business;
+    return business.businesses[0];
   }
 }
