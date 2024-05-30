@@ -69,11 +69,9 @@ model Business {
 
 model BusinessProviders {
   orderingBusinessId String
-  providerId         String
+  providerId         String   @id @unique
   business           Business @relation(fields: [orderingBusinessId], references: [orderingBusinessId], onUpdate: Cascade, onDelete: Cascade)
   provider           Provider @relation(fields: [providerId], references: [id], onUpdate: Cascade, onDelete: Cascade)
-
-  @@id([orderingBusinessId, providerId])
 }
 
 model Provider {
@@ -90,6 +88,7 @@ model Credential {
   id           Int        @id @default(autoincrement())
   name         String
   providerName String
+  businessName String       @default("")
   type         String
   data         Json?
   providers    Provider[]
