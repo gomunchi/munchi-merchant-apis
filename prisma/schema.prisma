@@ -87,12 +87,12 @@ model Provider {
 }
 
 model Credential {
-  id            Int        @id @default(autoincrement())
-  name          String
+  id           Int        @id @default(autoincrement())
+  name         String
   providerName String
-  type          String
-  data          Json?
-  providers     Provider[]
+  type         String
+  data         Json?
+  providers    Provider[]
 
   @@map("credential")
 }
