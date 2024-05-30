@@ -16,7 +16,7 @@ import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
 import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
 import { OrderingMenuMapperService } from './ordering-menu-mapper';
-import { Provider, Business as BusinessPrisma } from '@prisma/client';
+import { Provider, Business as BusinessPrisma, BusinessProviders } from '@prisma/client';
 import { ProviderEnum } from '../provider.type';
 
 @Injectable()
@@ -835,11 +835,13 @@ export class OrderingService implements ProviderService {
   async synchronizeMenuToWolt(
     orderingAccessToken: string,
     business: BusinessPrisma & {
-      provider: Provider[];
-    },
+      provider: (BusinessProviders & {
+          provider: Provider;
+      })[];
+  },
   ) {
     const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+      (provider:any) => provider.provider.name === ProviderEnum.Wolt,
     );
 
     const menu = await this.getMenuCategory(orderingAccessToken, business.orderingBusinessId);

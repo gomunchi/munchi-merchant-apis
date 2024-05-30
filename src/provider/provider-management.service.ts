@@ -1,22 +1,21 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Business, MenuTracking, Prisma, Provider } from '@prisma/client';
+import { Business, BusinessProviders, MenuTracking, Prisma, Provider } from '@prisma/client';
 import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus } from '../order/dto/order.dto';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
 import { OrderingService } from './ordering/ordering.service';
 
-import { AvailableProvider, ProviderEnum } from './provider.type';
-import { WoltRepositoryService } from './wolt/wolt-repository';
-import { WoltService } from './wolt/wolt.service';
-import { OrderingOrder } from './ordering/dto/ordering-order.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 import {
   OrderingCategoryProductExtra,
   OrderingMenuCategory,
 } from './ordering/dto/ordering-menu.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
-import moment from 'moment';
+import { OrderingOrder } from './ordering/dto/ordering-order.dto';
+import { AvailableProvider, ProviderEnum } from './provider.type';
+import { WoltRepositoryService } from './wolt/wolt-repository';
+import { WoltService } from './wolt/wolt.service';
 
 @Injectable()
 export class ProviderManagmentService {
@@ -170,7 +169,9 @@ export class ProviderManagmentService {
   }
 
   async syncProviderMenu(
-    providers: Provider[],
+    providers: (BusinessProviders & {
+      provider: Provider;
+    })[],
     orderingMenuData: OrderingMenuCategory[],
     orderingMenuExtraData: OrderingCategoryProductExtra[],
   ) {
@@ -178,7 +179,7 @@ export class ProviderManagmentService {
     if (providers.length > 0) {
       providers.forEach((provider) => {
         return this.moduleRef
-          .get(`${provider.name}Service`)
+          .get(`${provider.provider.name}Service`)
           .syncMenu(provider.providerId, orderingMenuData, orderingMenuExtraData);
       });
     }
@@ -192,12 +193,11 @@ export class ProviderManagmentService {
   ) {
     // Need a service to transform the body data to data that fit with specific provider
     // This will sync other provider menu except Ordering
-
-    providers.forEach((provider) => {
-      return this.moduleRef
-        .get(`${provider.name}Service`)
-        .editProduct(provider.providerId, externalProductId, orderingUserId, data);
-    });
+    // providers.forEach((provider) => {
+    //   return this.moduleRef
+    //     .get(`${provider.name}Service`)
+    //     .editProduct(provider.providerId, externalProductId, orderingUserId, data);
+    // });
   }
 
   async validateProvider(providers: string[] | string): Promise<boolean> {
@@ -215,7 +215,9 @@ export class ProviderManagmentService {
   async menuTracking(
     queue: MenuTracking,
     business: Business & {
-      provider: Provider[];
+      provider: (BusinessProviders & {
+        provider: Provider;
+      })[];
     },
   ) {
     if (!business) {
@@ -245,7 +247,7 @@ export class ProviderManagmentService {
     if (providers.length > 0) {
       this.logger.log(`Synchronizing provider menu data of ${business.name}`);
 
-      await this.syncProviderMenu(providers, menuData, menuOptionData);
+      await this.syncProviderMenu(business.provider, menuData, menuOptionData);
     }
   }
 }

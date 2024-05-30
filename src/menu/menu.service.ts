@@ -447,7 +447,6 @@ export class MenuService {
 
   async getWoltMenu(orderingUserId: number, businessPublicId: string) {
     const business = await this.businessService.findBusinessByPublicId(businessPublicId);
-
     const orderingBusinessId = business.orderingBusinessId;
 
     if (!business.provider || business.provider.length === 0) {
@@ -455,14 +454,12 @@ export class MenuService {
     }
 
     // Get wolt Venue
-    const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
-    );
+    const provider = business.provider.filter((p) => p.provider.name === ProviderEnum.Wolt);
 
     // Get wolt Menu data
     const woltMenuData: MenuData = await this.woltService.getMenuCategory(
       orderingUserId,
-      woltVenue[0].providerId,
+      provider[0].providerId,
     );
 
     return woltMenuData;
@@ -482,6 +479,7 @@ export class MenuService {
     menuQueue.forEach(async (queue) => {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
       this.logger.log(`${queue.name}`);
+      
       if (calculatedTime === 0 && queue.processing) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 

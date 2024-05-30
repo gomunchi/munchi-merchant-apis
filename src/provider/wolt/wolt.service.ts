@@ -413,7 +413,6 @@ export class WoltService implements ProviderService {
           password: woltCredentials.password,
         },
       });
-
       const { resource_url } = response.data;
 
       await new Promise((resolve) => setTimeout(resolve, 1500)); // 1000ms = 1 second
@@ -616,7 +615,7 @@ export class WoltService implements ProviderService {
 
   async menuApiCallBack(woltVenueId: string, state: 'success' | 'cooldown') {
     console.log('Executing callback process');
-    const business = await this.prismaService.provider.findUnique({
+    const business = await this.prismaService.businessProviders.findUnique({
       where: {
         providerId: woltVenueId,
       },
