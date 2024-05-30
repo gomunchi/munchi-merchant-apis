@@ -127,15 +127,13 @@ export class WebhookService implements OnModuleInit {
   async woltOrderNotification(woltWebhookdata: WoltOrderNotification) {
     const venueId = woltWebhookdata.order.venue_id;
     // Get apiKey by venue id
-    const woltCredentals = await this.woltService.getWoltCredentials(venueId, 'venueId');
-
+    const woltCredentials = await this.woltService.getWoltCredentials(venueId, 'order');
     let woltOrder = await this.woltService.getOrderById(
-      woltCredentals.apiKey,
+      woltCredentials.value,
       woltWebhookdata.order.id,
     );
-
     // Find business to get business id for socket to emit
-    const business = await this.businessService.findBusinessByWoltVenueid(venueId);
+    const business = await this.businessService.findBusinessByWoltVenueId(venueId);
 
     // Update pick up time. Sometimes Wolt hasn't fully update pick up time
     if (woltOrder.delivery.type === 'homedelivery') {
@@ -164,8 +162,7 @@ export class WebhookService implements OnModuleInit {
     }
 
     // Sync order again
-
-    await this.woltService.syncWoltOrder(woltCredentals.apiKey, woltWebhookdata.order.id);
+    await this.woltService.syncWoltOrder(woltCredentials.value, woltWebhookdata.order.id);
 
     //Log the last order
     if (woltWebhookdata.order.status === 'DELIVERED') {
@@ -173,6 +170,7 @@ export class WebhookService implements OnModuleInit {
     }
     this.server.to(business.orderingBusinessId).emit('order_change', formattedWoltOrder);
   }
+   
 
   async notifyCheckBusinessStatus(businessPublicId: string) {
     const business = await this.businessService.findBusinessByPublicId(businessPublicId);

@@ -498,8 +498,8 @@ export class OrderingService implements ProviderService {
 
   async syncMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
     const woltCredentials = await this.woltService.getWoltCredentials(
-      orderingUserId,
-      'orderingUserId',
+      woltVenueId,
+      'menu',
     );
 
     try {

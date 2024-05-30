@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Business, MenuTracking, Prisma, Provider } from '@prisma/client';
@@ -107,10 +107,37 @@ export class ProviderManagmentService {
       orderStatus: AvailableOrderStatus;
       preparedIn: string;
     },
+    businesses: unknown,
   ) {
+    if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
+      throw new BadRequestException(
+        `Something wrong happened: updateOrder() at 108, ${ProviderManagmentService.name}`,
+      );
+    }
+
+    // Default provider
+    if (provider === ProviderEnum.Munchi) {
+      return this.orderingService.updateOrder(orderingUserId, orderId, updateData);
+    }
+
+    //Check business from order data
+
+    const order = await this.getOrderById(orderId, orderingUserId);
+    const { business } = order;
+
+    const filterBusiness = businesses.filter((b) => b.id === business.publicId);
+    const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
+
+    if (provider.length === 0) {
+      throw new BadRequestException(
+        `Something wrong happened: updateOrder() at 125, ${ProviderManagmentService.name}`,
+      );
+    }
+
+    // Dynamic provider
     return this.moduleRef
       .get(`${provider}Service`)
-      .updateOrder(orderingUserId, orderId, updateData);
+      .updateOrder(orderingUserId, orderId, updateData, filteredProvider[0]);
   }
 
   async rejectOrder(
@@ -120,12 +147,26 @@ export class ProviderManagmentService {
     orderRejectData: {
       reason: string;
     },
+    businesses: unknown,
   ) {
     this.eventEmitter.emit('preorderQueue.validate', parseInt(orderId));
 
+    const order = await this.getOrderById(orderId, orderingUserId);
+
+    if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
+      throw new BadRequestException(
+        `Something wrong happened: updateOrder() at 108, ${ProviderManagmentService.name}`,
+      );
+    }
+
+    const { business } = order;
+
+    const filterBusiness = businesses.filter((b) => b.id === business.publicId);
+    const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
+
     return this.moduleRef
       .get(`${provider}Service`)
-      .rejectOrder(orderingUserId, orderId, orderRejectData);
+      .rejectOrder(orderingUserId, orderId, orderRejectData, filteredProvider[0]);
   }
 
   async syncProviderMenu(

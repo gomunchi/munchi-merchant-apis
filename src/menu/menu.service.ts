@@ -38,6 +38,7 @@ export class MenuService {
     private utilService: UtilsService,
   ) {}
   async getMenuCategory(orderingUserId: number, publicBusinessId: string) {
+    console.log('IS this running');
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
@@ -45,7 +46,7 @@ export class MenuService {
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
     const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+      (businessProvider) => businessProvider.provider.name === ProviderEnum.Wolt,
     );
 
     const menu = await this.orderingService.getMenuCategory(
@@ -91,7 +92,7 @@ export class MenuService {
 
     // Get wolt Venue
     const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+      (businessProvider) => businessProvider.provider.name === ProviderEnum.Wolt,
     );
 
     // Get wolt Menu data
