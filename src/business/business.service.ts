@@ -7,7 +7,7 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Business, Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import moment from 'moment-timezone';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -343,20 +343,20 @@ export class BusinessService {
   async findBusinessOwnedByOrderingUserId(orderingUserId: number) {
     const findUserInputArgs = Prisma.validator<Prisma.UserFindUniqueArgs>()({
       where: {
-       orderingUserId: orderingUserId
+        orderingUserId: orderingUserId,
       },
-      include:{
+      include: {
         businesses: {
-          include:{
-            provider: true
-          }
-        }
-      }
-    })
+          include: {
+            provider: true,
+          },
+        },
+      },
+    });
 
-    const userBusinesses = await this.prismaService.user.findUnique(findUserInputArgs)
+    const userBusinesses = await this.prismaService.user.findUnique(findUserInputArgs);
 
-    return userBusinesses.businesses
+    return userBusinesses.businesses;
   }
 
   async updateBusinessOwners(businsessData: any, orderingUserId: number) {
@@ -374,8 +374,6 @@ export class BusinessService {
     });
   }
 
-  
-
   async findBusinessByPublicId(publicBusinessId: string) {
     return await this.prismaService.business.findUnique({
       where: {
@@ -383,9 +381,9 @@ export class BusinessService {
       },
       include: {
         provider: {
-          include:{
-            provider: true
-          }
+          include: {
+            provider: true,
+          },
         },
       },
     });
@@ -408,10 +406,10 @@ export class BusinessService {
   async findBusinessByWoltVenueId(woltVenueId: string) {
     const provider = await this.prismaService.businessProviders.findUnique({
       where: {
-        providerId: woltVenueId
+        providerId: woltVenueId,
       },
       include: {
-        business: true
+        business: true,
       },
     });
     if (!provider || !provider.business) {
@@ -446,28 +444,63 @@ export class BusinessService {
     });
   }
 
-  async addBusinessProvider(businessPublicId: string, data: Omit<ProviderDto, 'id'>) {
+  async addBusinessProvider(businessPublicId: string, data: ProviderDto) {
+    const { providerId, providerName } = data;
+
     const business = await this.findBusinessByPublicId(businessPublicId);
     if (!business) {
       throw new NotFoundException("Business can't be found");
     }
-    // const dataUpsert = Prisma.validator<Prisma.ProviderUncheckedCreateInput>()({
-    //   name: data.name,
-    //   providerId: data.providerId,
-    //   orderingBusinessId: business.orderingBusinessId,
-    // });
+    await this.createBusinessProvider(providerId, providerName);
 
-    // await this.prismaService.provider.upsert({
-    //   where: {
-    //     orderingBusinessId: business.orderingBusinessId,
-    //   },
-    //   create: dataUpsert,
-    //   update: dataUpsert,
-    // });
+    await this.createBusinessProviderCredentials(data, business);
+
+    await this.connectBusinessProvider(providerId, business.orderingBusinessId);
 
     return {
       message: 'Added provider succesfully',
     };
+  }
+
+  async connectBusinessProvider(providerId: string, orderingBusinessId: string) {
+    return await this.prismaService.businessProviders.create({
+      data: {
+        orderingBusinessId: orderingBusinessId,
+        providerId: providerId,
+      },
+    });
+  }
+
+  async createBusinessProviderCredentials(data: ProviderDto, business: Business) {
+    const { credentials, providerId, providerName, credentialName, type } = data;
+
+    const credentialsInputArgs = Prisma.validator<Prisma.CredentialUncheckedCreateInput>()({
+      name: credentialName,
+      providerName: providerName,
+      type: type,
+      businessName: business.name,
+      data: credentials,
+      providers: {
+        connect: {
+          id: providerId,
+        },
+      },
+    });
+
+    return await this.prismaService.credential.create({
+      data: credentialsInputArgs,
+    });
+  }
+
+  async createBusinessProvider(providerId: string, providerName: string) {
+    const providerCreateInputArgs = Prisma.validator<Prisma.ProviderCreateArgs>()({
+      data: {
+        id: providerId,
+        name: providerName,
+      },
+    });
+
+    return await this.prismaService.provider.create(providerCreateInputArgs);
   }
 
   async saveMultipleBusinessToDb(businesses: BusinessDto[]) {
