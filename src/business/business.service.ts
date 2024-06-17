@@ -254,19 +254,7 @@ export class BusinessService {
       throw new BadRequestException('No provider found');
     }
 
-    const providerData = businessProvider.filter(
-      (businessProvider) => businessProvider.provider.name === provider,
-    );
-
-    const { provider: providerInfo } = providerData[0];
-
-    const localBusiness = await this.findBusinessByPublicId(businessPublicId);
-
     let scheduleOpenTime: Date;
-
-    if (!orderingBusiness || !localBusiness) {
-      throw new NotFoundException('Cannot find business to set today schedule');
-    }
 
     if (status === false) {
       if (!duration) {
@@ -308,6 +296,17 @@ export class BusinessService {
 
       return plainToInstance(BusinessDto, response);
     } else if (provider === ProviderEnum.Wolt) {
+      const providerData = businessProvider.filter(
+        (businessProvider) => businessProvider.provider.name === provider,
+      );
+
+      const { provider: providerInfo } = providerData[0];
+
+      const localBusiness = await this.findBusinessByPublicId(businessPublicId);
+      if (!orderingBusiness || !localBusiness) {
+        throw new NotFoundException('Cannot find business to set today schedule');
+      }
+
       await this.prismaService.provider.update({
         where: {
           id: providerInfo.id,
@@ -317,6 +316,7 @@ export class BusinessService {
         },
       });
       console.log('🚀 ~ BusinessService ~ scheduleOpenTime line 320:', scheduleOpenTime);
+
       // //send request to wolt venue
       await this.woltService.setWoltVenueStatus(
         providerInfo.id,
