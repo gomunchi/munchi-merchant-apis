@@ -152,11 +152,11 @@ export class WoltOrderMapperService {
         id: woltVenueId,
       },
       select: {
-        businesses:{
-          select:{
-            business: true
-          }
-        }
+        businesses: {
+          select: {
+            business: true,
+          },
+        },
       },
     });
 

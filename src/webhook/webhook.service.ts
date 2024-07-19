@@ -170,7 +170,6 @@ export class WebhookService implements OnModuleInit {
     }
     this.server.to(business.orderingBusinessId).emit('order_change', formattedWoltOrder);
   }
-   
 
   async notifyCheckBusinessStatus(businessPublicId: string) {
     const business = await this.businessService.findBusinessByPublicId(businessPublicId);

@@ -497,10 +497,7 @@ export class OrderingService implements ProviderService {
   }
 
   async syncMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
-    const woltCredentials = await this.woltService.getWoltCredentials(
-      woltVenueId,
-      'menu',
-    );
+    const woltCredentials = await this.woltService.getWoltCredentials(woltVenueId, 'menu');
 
     try {
       const response = await axios.post(
@@ -836,12 +833,12 @@ export class OrderingService implements ProviderService {
     orderingAccessToken: string,
     business: BusinessPrisma & {
       provider: (BusinessProviders & {
-          provider: Provider;
+        provider: Provider;
       })[];
-  },
+    },
   ) {
     const woltVenue = business.provider.filter(
-      (provider:any) => provider.provider.name === ProviderEnum.Wolt,
+      (provider: any) => provider.provider.name === ProviderEnum.Wolt,
     );
 
     const menu = await this.getMenuCategory(orderingAccessToken, business.orderingBusinessId);

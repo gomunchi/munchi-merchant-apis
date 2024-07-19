@@ -65,8 +65,12 @@ export class OrderService {
     }
   }
 
-  async updateOrder(sessionPublicId:string, orderingUserId: number, orderId: string, orderData: OrderData) {
-
+  async updateOrder(
+    sessionPublicId: string,
+    orderingUserId: number,
+    orderId: string,
+    orderData: OrderData,
+  ) {
     if (!orderData || Object.values(orderData).some((value) => value === null)) {
       throw new NotFoundException('Not enough data');
     }
@@ -77,7 +81,7 @@ export class OrderService {
       throw new NotFoundException('No provider found');
     }
 
-    const businesses = await this.businessService.getBusinessInSession(sessionPublicId)
+    const businesses = await this.businessService.getBusinessInSession(sessionPublicId);
 
     try {
       //Update order base on provider
@@ -89,7 +93,7 @@ export class OrderService {
           orderStatus: orderData.orderStatus,
           preparedIn: orderData.preparedIn,
         },
-        businesses
+        businesses,
       );
 
       return order;
@@ -98,20 +102,26 @@ export class OrderService {
     }
   }
 
-  async rejectOrder(sessionPublicId:string, orderingUserId: number, orderId: string, orderRejectData: OrderRejectData) {
-
+  async rejectOrder(
+    sessionPublicId: string,
+    orderingUserId: number,
+    orderId: string,
+    orderRejectData: OrderRejectData,
+  ) {
     if (!orderRejectData || Object.values(orderRejectData).some((value) => value === null)) {
       throw new NotFoundException('Not enough data');
     }
 
-    const validProvider = await this.providerManagementService.validateProvider(orderRejectData.provider);
+    const validProvider = await this.providerManagementService.validateProvider(
+      orderRejectData.provider,
+    );
 
     if (!validProvider) {
       throw new NotFoundException('No provider found');
     }
 
-    const businesses = await this.businessService.getBusinessInSession(sessionPublicId)
-    
+    const businesses = await this.businessService.getBusinessInSession(sessionPublicId);
+
     try {
       return await this.providerManagementService.rejectOrder(
         orderRejectData.provider,
@@ -120,7 +130,7 @@ export class OrderService {
         {
           reason: orderRejectData.reason,
         },
-        businesses
+        businesses,
       );
     } catch (error) {
       this.utils.logError(error);

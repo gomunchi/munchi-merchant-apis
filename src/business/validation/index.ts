@@ -35,7 +35,6 @@ export class ProviderDto {
   @IsString()
   type: string;
 
-  
   @ApiProperty({
     description: 'The name of the credentials',
     example: 'JSON api',
