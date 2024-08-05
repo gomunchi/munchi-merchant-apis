@@ -129,7 +129,7 @@ export class ProviderManagmentService {
 
     if (provider.length === 0) {
       throw new BadRequestException(
-        `Something wrong happened: updateOrder() at 125, ${ProviderManagmentService.name}`,
+        `Something wrong happened: updateOrder() at 132, ${ProviderManagmentService.name}`,
       );
     }
 
@@ -148,13 +148,13 @@ export class ProviderManagmentService {
     },
     businesses: unknown,
   ) {
-    this.eventEmitter.emit('preorderQueue.validate', parseInt(orderId));
+    this.eventEmitter.emit('preorderQueue.validate', orderId);
 
     const order = await this.getOrderById(orderId, orderingUserId);
 
     if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
       throw new BadRequestException(
-        `Something wrong happened: updateOrder() at 108, ${ProviderManagmentService.name}`,
+        `Something wrong happened: rejectOrder() at 157, ${ProviderManagmentService.name}`,
       );
     }
 
