@@ -13,10 +13,12 @@ import { WoltOrderMapperService } from 'src/provider/wolt/wolt-order-mapper';
 import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { OrderResponsePreOrderStatusEnum, OrderStatusEnum } from 'src/order/dto/order.dto';
+import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
+import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { UtilsService } from 'src/utils/utils.service';
 import { NotificationService } from './../notification/notification.service';
-import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
-import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 
 @WebSocketGateway({
   cors: {
@@ -43,6 +45,7 @@ export class WebhookService implements OnModuleInit {
     private prismaService: PrismaService,
     private woltOrderMapperService: WoltOrderMapperService,
     private woltRepositoryService: WoltRepositoryService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   onModuleInit() {
@@ -115,6 +118,13 @@ export class WebhookService implements OnModuleInit {
     ) {
       return;
     } else {
+      if (
+        order.status === OrderingOrderStatus.AcceptedByBusiness &&
+        order.reporting_data.at.hasOwnProperty(`status:${OrderingOrderStatus.Preorder}`)
+      ) {
+        this.eventEmitter.emit('preorderQueue.validate', order.id.toString());
+      }
+
       try {
         this.server.to(order.business_id.toString()).emit('order_change', formattedOrder);
         await this.orderingService.syncOrderingOrder(order.id.toString());
@@ -125,6 +135,7 @@ export class WebhookService implements OnModuleInit {
   }
 
   async woltOrderNotification(woltWebhookdata: WoltOrderNotification) {
+    this.logger.log(`latest webhook data by Wolt: ${JSON.stringify(woltWebhookdata)}`);
     const venueId = woltWebhookdata.order.venue_id;
     // Get apiKey by venue id
     const woltCredentials = await this.woltService.getWoltCredentials(venueId, 'order');
@@ -163,6 +174,13 @@ export class WebhookService implements OnModuleInit {
 
     // Sync order again
     await this.woltService.syncWoltOrder(woltCredentials.value, woltWebhookdata.order.id);
+
+    if (
+      formattedWoltOrder.preorder.status === OrderResponsePreOrderStatusEnum.Confirm &&
+      formattedWoltOrder.status === OrderStatusEnum.IN_PROGRESS
+    ) {
+      this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
+    }
 
     //Log the last order
     if (woltWebhookdata.order.status === 'DELIVERED') {
