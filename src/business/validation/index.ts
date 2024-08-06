@@ -12,12 +12,12 @@ export class ProviderDto {
   id: string;
 
   @ApiProperty({
-    description: 'The status of the config',
-    example: 'Status',
+    description: 'The name of the provider',
+    example: 'Wolt',
   })
   @IsNotEmpty()
   @IsString()
-  name: AvailableProvider;
+  providerName: AvailableProvider;
 
   @ApiProperty({
     description: 'The id of the provider',
@@ -26,4 +26,27 @@ export class ProviderDto {
   @IsNotEmpty()
   @IsString()
   providerId: string;
+
+  @ApiProperty({
+    description: 'The type of the provider',
+    example: '1234abcde',
+  })
+  @IsNotEmpty()
+  @IsString()
+  type: string;
+
+  @ApiProperty({
+    description: 'The name of the credentials',
+    example: 'JSON api',
+  })
+  @IsNotEmpty()
+  @IsString()
+  credentialName: string;
+
+  @ApiProperty({
+    description: 'The credentials of the provider',
+    example: '1234abcde',
+  })
+  @IsNotEmpty()
+  credentials: any;
 }

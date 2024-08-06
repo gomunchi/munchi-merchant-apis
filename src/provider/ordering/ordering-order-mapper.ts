@@ -32,7 +32,9 @@ export class OrderingOrderMapperService {
     const preorder: boolean = orderingOrder.reporting_data.at.hasOwnProperty(`status:13`);
     const productDto = plainToInstance(ProductDto, orderingOrder.products);
     const offers = plainToInstance(OfferDto, orderingOrder.offers);
-    const orderStatus = this.mapOrderingStatusToOrderStatus(orderingOrder.status) as string;
+    const orderStatus = this.mapOrderingStatusToOrderStatus(
+      orderingOrder.status,
+    ) as AvailableOrderStatus;
     const business = await this.validateOrderingBusiness(orderingOrder.business_id.toString());
     const inputFormat = 'YYYY-MM-DD HH:mm:ss';
     let lastModified: string | null = null;

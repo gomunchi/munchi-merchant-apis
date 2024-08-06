@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Business, Prisma, Provider } from '@prisma/client';
+import { Business, Prisma } from '@prisma/client';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from 'src/business/business.service';
 import { FinancialAnalyticsService } from 'src/financial-analytics/financial-analytics.service';
@@ -7,10 +7,10 @@ import { OrderResponse, OrderStatusEnum, PayMethodEnum } from 'src/order/dto/ord
 import { OrderService } from 'src/order/order.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 
-import { mapToDate } from './utils/getTimeRange';
+import { OrderingPaymentEnum } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderPrismaSelectArgs } from 'src/provider/wolt/dto/wolt-order.dto';
 import { HistoryFilterQuery, HistoryQuery } from './dto/history,dto';
-import { OrderingPaymentEnum } from 'src/provider/ordering/dto/ordering-order.dto';
+import { mapToDate } from './utils/getTimeRange';
 
 @Injectable()
 export class HistoryService {
@@ -84,15 +84,20 @@ export class HistoryService {
       skip: (pageInNumber - 1) * rowPerPageInNumber,
     });
 
-    const totalOrders = await this.orderService.countTotalOrderByArgs(orderArgs);
+    const totalOrderArgs = Prisma.validator<Prisma.OrderFindManyArgs>()({
+      where: orderArgs.where,
+      include: orderArgs.include,
+    });
+
+    const totalOrders = await this.orderService.getManyOrderByArgs(totalOrderArgs);
 
     const order: OrderResponse[] = await this.orderService.getManyOrderByArgs(orderArgs);
 
-    const analyticsData = await this.financialAnalyticsService.analyzeOrderData(order);
+    const analyticsData = await this.financialAnalyticsService.analyzeOrderData(totalOrders);
 
     return {
       ...analyticsData,
-      totalOrders: totalOrders,
+      totalOrders: totalOrders.length,
       orders: order,
     };
   }
@@ -120,7 +125,11 @@ export class HistoryService {
       orderingBusinessIds.map(async (orderingBusinessId: string) => {
         const businessIncludeArgs = Prisma.validator<Prisma.BusinessArgs>()({
           include: {
-            provider: true,
+            provider: {
+              include: {
+                provider: true,
+              },
+            },
           },
         });
 
@@ -129,6 +138,7 @@ export class HistoryService {
           orderingBusinessId,
           businessIncludeArgs,
         );
+        console.log('🚀 ~ HistoryService ~ orderingBusinessIds.map ~ business:', business);
 
         //Initialize the business response with initial data
         const businessObj = {
@@ -166,12 +176,16 @@ export class HistoryService {
         //Analyze orders sold by other provider
         if (business.provider.length !== 0) {
           await Promise.all(
-            business.provider.map(async (provider: Provider) => {
+            business.provider.map(async (businessProvider: any) => {
+              console.log(
+                '🚀 ~ HistoryService ~ business.provider.map ~ businessProvider:',
+                businessProvider,
+              );
               //Analyzer order by provider
               const providerOrderArgs = Prisma.validator<Prisma.OrderFindManyArgs>()({
                 where: {
                   orderingBusinessId: orderingBusinessId,
-                  provider: provider.name,
+                  provider: businessProvider.provider.name,
                   status: OrderStatusEnum.DELIVERED,
                   createdAt: {
                     gte: startDate,
@@ -191,7 +205,7 @@ export class HistoryService {
               );
 
               businessObj.salesByProvider.push({
-                provider: provider.name,
+                provider: businessProvider.provider.name,
                 products: providerAnalyticsData,
               });
             }),
