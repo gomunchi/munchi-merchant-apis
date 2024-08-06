@@ -6,10 +6,13 @@ import * as Sentry from '@sentry/node';
 import { SentryFilter } from './filters/sentry.filter';
 
 import { AppModule } from './app/app.module';
-declare const module: any;
-
+import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['log', 'error', 'warn'],
+    bufferLogs: true,
+  });
+
   const config = new DocumentBuilder()
     .setTitle('Api documentation')
     .setDescription('The API description of munchi-apis')
@@ -58,7 +61,11 @@ async function bootstrap() {
     }),
   );
 
+  app.useLogger(app.get(Logger));
+  app.useGlobalInterceptors(new LoggerErrorInterceptor());
+
   await app.listen(process.env.PORT);
+
   if (module.hot) {
     module.hot.accept();
     module.hot.dispose(() => app.close());

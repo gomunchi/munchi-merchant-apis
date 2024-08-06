@@ -12,6 +12,7 @@ export class HistoryDto {
   type: number;
 
   @Expose()
+  // eslint-disable-next-line @typescript-eslint/ban-types
   data: Array<Object>;
 
   @Expose({ name: 'created_at' })

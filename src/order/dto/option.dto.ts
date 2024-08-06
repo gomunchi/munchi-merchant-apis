@@ -4,19 +4,19 @@ import { SubOptionDto } from './suboption.dto';
 @Exclude()
 export class OptionDto {
   @Expose()
-  id: number;
+  id: string;
   @Expose()
-  name: number;
+  name: string;
 
   @Expose()
-  image: number;
+  image: string;
 
   @Expose()
-  price: number;
+  price: string;
 
-  @Expose()
+  @Expose({ name: 'suboptions' })
   @Type(() => SubOptionDto)
-  suboptions: SubOptionDto[];
+  subOptions: SubOptionDto[];
 
   constructor(partial: Partial<OptionDto>) {
     Object.assign(this, partial);

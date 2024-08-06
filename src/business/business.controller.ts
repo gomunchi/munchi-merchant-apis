@@ -1,48 +1,112 @@
-/* eslint-disable prettier/prettier */
-import { Body, Controller, Get, Param, Post, Request, UseGuards } from '@nestjs/common';
-import { ApiBadRequestResponse, ApiBearerAuth, ApiCreatedResponse } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Request,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
+import {
+  ApiAcceptedResponse,
+  ApiBadRequestResponse,
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ApiKeyGuard } from 'src/auth/guard/apiKey.guard';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from './business.service';
-import { AllBusinessDto, BusinessDto } from './dto/business.dto';
+import { BusinessDto, SetOnlineStatusDto } from './dto/business.dto';
+import { ProviderDto } from './validation';
 
-@UseGuards(JwtGuard)
 @Controller('business')
 @ApiBearerAuth('JWT-auth')
 @ApiBadRequestResponse({
   description: 'Something wrong happened',
 })
+@ApiTags('Business')
 export class BusinessController {
-  constructor(private businessService: BusinessService) {}
+  constructor(private businessService: BusinessService, private sessionService: SessionService) {}
+
+  @ApiAcceptedResponse({
+    description: 'Retrieve all businesses owned by a user',
+  })
+  @UseGuards(JwtGuard)
+  @Get('allbusiness')
+  async getUserBusinesses(@Request() req: any): Promise<BusinessDto[]> {
+    const { sessionPublicId } = req.user;
+    const user = await this.sessionService.getSessionUserBySessionPublicId(sessionPublicId);
+    return this.businessService.businessOwnershipService(user.orderingUserId);
+  }
+
+  @UseGuards(ApiKeyGuard)
+  @Get('ordering-businesses')
+  async getAllBusiness(@Request() request: any) {
+    const page = request.query.page;
+    const rowPerPage = request.query.rowPerPage;
+    return this.businessService.getAllBusiness(parseInt(page), parseInt(rowPerPage));
+  }
 
   @ApiCreatedResponse({
-    description: 'Get all businesses',
-    type: AllBusinessDto,
+    description: 'Get business in session',
   })
-  @Get('allbusiness')
-  async getAllBusiness(@Request() req: any) {
-    const { userId } = req.user;
-    return this.businessService.getAllBusiness(userId);
+  @UseGuards(JwtGuard)
+  @Get('session-business')
+  async getBusinessInSession(@Request() req: any) {
+    const { sessionPublicId } = req.user;
+
+    return this.businessService.getBusinessInSession(sessionPublicId);
   }
+
   @ApiCreatedResponse({
     description: 'Get a specific business',
     type: BusinessDto,
   })
+  @UseGuards(JwtGuard)
   @Get(':businessId')
   async getBusinessById(@Request() req: any, @Param('businessId') publicBusinessId: string) {
-    const { userId } = req.user;
-    return this.businessService.getBusinessById(userId, publicBusinessId);
+    const { sessionPublicId } = req.user;
+    const user = await this.sessionService.getSessionUserBySessionPublicId(sessionPublicId);
+    return await this.businessService.getBusinessById(user.orderingUserId, publicBusinessId);
   }
   @ApiCreatedResponse({
     description: 'Edit a specific business',
     type: BusinessDto,
   })
-  @Post('editBusiness')
-  async editBusiness(
-    @Request() req: any,
-    @Body('publicBusinessId') publicBusinessId: string,
-    @Body('status') status: boolean,
-  ) {
-    const { userId } = req.user;
-    return this.businessService.editBusiness(userId, publicBusinessId, status);
+  @UseGuards(JwtGuard)
+  @Post('online-status')
+  async setOnlineStatus(@Request() req: any, @Body() body: SetOnlineStatusDto) {
+    const { status, duration, id: businessPublicId, provider } = body;
+
+    if (status === false && !duration) {
+      throw new BadRequestException('duration is needed when status is false');
+    }
+
+    const { userPublicId } = req.user;
+    return this.businessService.setOnlineStatusByPublicId(
+      provider,
+      userPublicId,
+      businessPublicId,
+      status,
+      duration,
+    );
+  }
+
+  @ApiCreatedResponse({
+    description: 'Add an extra business config for a specific extra business',
+  })
+  @UseGuards(ApiKeyGuard)
+  @Post('add-provider')
+  async setExtraConfig(@Body(new ValidationPipe()) body: ProviderDto) {
+    const { name, id: businessPublicId, providerId } = body;
+
+    return this.businessService.addBusinessProvider(businessPublicId, {
+      name: name,
+      providerId: providerId,
+    });
   }
 }

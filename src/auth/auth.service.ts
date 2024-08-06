@@ -1,19 +1,21 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Cryptr from 'cryptr';
+import { Prisma } from '@prisma/client';
 import moment from 'moment';
 import { UserResponse } from 'src/auth/dto/auth.dto';
-import { OrderingIoService } from 'src/ordering.io/ordering.io.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { AuthCredentials } from 'src/type';
 import { UserService } from 'src/user/user.service';
 import { UtilsService } from 'src/utils/utils.service';
 import { SessionService } from './session.service';
+import { JwtTokenPayload } from './session.type';
+
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(forwardRef(() => UserService)) private user: UserService,
-    @Inject(forwardRef(() => OrderingIoService)) private readonly orderingIo: OrderingIoService,
+    @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
     @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
     @Inject(forwardRef(() => SessionService)) private readonly sessionService: SessionService,
     private config: ConfigService,
@@ -21,33 +23,57 @@ export class AuthService {
   ) {}
 
   async signIn(credentials: AuthCredentials) {
-    const response = await this.orderingIo.signIn(credentials);
-    const tokens = await this.sessionService.getTokens(response.id, response.email);
-    const { access_token, token_type, expires_in } = response.session;
-    const expiredAt = moment(moment()).add(expires_in, 'milliseconds').format();
-    const user = await this.user.getUserByUserId(response.id);
+    const orderingUserInfo = await this.orderingService.signIn(credentials);
 
-    if (!user) {
-      const newUser = await this.user.createUser(response, tokens, credentials.password);
-      return newUser;
-    } else if (user && !user.session) {
-      await this.sessionService.createSession(user.userId, {
-        accessToken: access_token,
-        expiresAt: expiredAt,
-        tokenType: token_type,
-      });
-    }
-
-    await this.sessionService.updateTokens(response.id, tokens.refreshToken, {
-      accessToken: access_token,
-      expiresAt: expiredAt,
-      tokenType: token_type,
+    const userSelect = Prisma.validator<Prisma.UserSelect>()({
+      id: true,
+      publicId: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      level: true,
+      businesses: {
+        select: {
+          publicId: true,
+          name: true,
+        },
+      },
     });
+
+    // Upsert user to database
+    const user = await this.user.upsertUserFromOrderingInfo<typeof userSelect>(
+      { ...orderingUserInfo, password: credentials.password },
+      userSelect,
+    );
+
+    const sessionPublicId = this.utils.generatePublicId();
+    const jwtPayload: JwtTokenPayload = {
+      userPublicId: user.publicId,
+      email: user.email,
+      sessionPublicId: sessionPublicId,
+    };
+
+    // Generate JwtToken and RefreshToken
+    const tokens = await this.sessionService.getTokens(jwtPayload);
+
+    const sessionData = Prisma.validator<Prisma.SessionUncheckedCreateInput>()({
+      publicId: sessionPublicId,
+      refreshToken: tokens.refreshToken,
+      userId: user.id,
+      lastAccessTs: moment.utc().toDate(),
+    });
+
+    const sessionSelect = Prisma.validator<Prisma.SessionSelect>()({
+      publicId: true,
+    });
+
+    // Create new session for user
+    await this.sessionService.createSession(sessionData, sessionSelect);
 
     return new UserResponse(
       user.email,
       user.firstName,
-      user.lastname,
+      user.lastName,
       user.level,
       user.publicId,
       tokens.verifyToken,
@@ -55,24 +81,34 @@ export class AuthService {
     );
   }
 
-  getPassword(password: string, needCrypt: boolean) {
-    const cryptr = new Cryptr(this.config.get('HASH_SECRET'));
-    let passwordAfter: string;
-    if (needCrypt) {
-      passwordAfter = cryptr.encrypt(password);
-    } else {
-      passwordAfter = cryptr.decrypt(password);
-    }
-    return passwordAfter;
-  }
-
-  async signOut(userId: number) {
-    const accessToken = await this.utils.getAccessToken(userId);
-    await this.orderingIo.signOut(accessToken);
-    await this.prisma.session.delete({
-      where: {
-        userId: userId,
+  /**
+   * * Have checked
+   *
+   * @param sessionPublicId
+   */
+  async signOut(sessionPublicId: string) {
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+      select: {
+        id: true,
+        refreshToken: true,
+        user: {
+          select: {
+            orderingUserId: true,
+          },
+        },
       },
     });
+
+    const session = await this.sessionService.getSessionByPublicId<
+      Prisma.SessionGetPayload<typeof findSessionArgs>
+    >(sessionPublicId, findSessionArgs);
+
+    const accessToken = await this.utils.getOrderingAccessToken(session.user.orderingUserId);
+    await this.orderingService.signOut(accessToken);
+    await this.sessionService.deleteSession({
+      publicId: sessionPublicId,
+    });
+
+    return { message: 'Logout successfully' };
   }
 }

@@ -3,7 +3,7 @@ import { Exclude, Expose } from 'class-transformer';
 @Exclude()
 export class SubOptionDto {
   @Expose()
-  id: number;
+  id: string;
 
   @Expose()
   name: string;
@@ -11,7 +11,7 @@ export class SubOptionDto {
   @Expose()
   image: string;
   @Expose()
-  price: number;
+  price: string;
 
   @Expose()
   position: number;

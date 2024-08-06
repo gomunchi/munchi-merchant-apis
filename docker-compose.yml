@@ -1,35 +1,26 @@
 version: '3.8'
 services:
-  dev-db:
-    image: postgres:15
+  db-development:
+    image: postgres
+    restart: always
     ports:
-      - 5434:5432
+      - ${POSTGRES_PORT_DEVELOPMENT}:5432
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: huy123
-      POSTGRES_DB: gomunchi
-  test-db:
-    image: postgres:15
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  db-testing:
+    image: postgres
+    restart: always
     ports:
-      - 5435:5432
+      - ${POSTGRES_PORT_TESTING}:5432
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: huy123
-      POSTGRES_DB: gomunchi
-  dev:
-        container_name: nestjs_api_dev
-        image: nestjs-api-dev:1.0.0
-        build:
-            context: .
-            target: development
-            dockerfile: ./Dockerfile
-        command: npm run start:debug
-        ports:
-            - 3000:3000
-            - 9229:9229
-        networks:
-            - nesjs-network
-        volumes:
-            - .:/usr/src/app
-            - /usr/src/app/node_modules
-        restart: unless-stopped
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"

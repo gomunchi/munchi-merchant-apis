@@ -1,19 +1,21 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Exclude, Expose, Transform, Type } from 'class-transformer';
 import { OptionDto } from './option.dto';
 
 @Exclude()
 export class ProductDto {
   @Expose({ name: 'product_id' })
-  id: number;
+  @Transform(({ value }) => value.toString())
+  id: string;
 
   @Expose()
-  name: number;
+  name: string;
 
   @Expose()
   quantity: number;
 
-  @Expose()
-  price: number;
+  @Expose({ name: 'price' })
+  @Transform(({ value }) => value.toString())
+  price: string;
 
   @Expose()
   comment: string;
