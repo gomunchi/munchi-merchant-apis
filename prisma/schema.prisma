@@ -29,63 +29,71 @@ model ApiKey {
   @@unique([name, value])
 }
 
-model ProviderCredential {
-  id       Int     @unique @default(autoincrement())
-  username String?
-  password String?
-  apiKey   String?
-  user     User[]  @relation("User-provider")
-}
-
 model User {
-  id                           Int                 @id @default(autoincrement())
-  orderingUserId               Int                 @unique
-  orderingAccessToken          String              @unique
-  orderingAccessTokenExpiredAt DateTime            @db.Timestamp()
+  id                           Int        @id @default(autoincrement())
+  orderingUserId               Int        @unique
+  orderingAccessToken          String     @unique
+  orderingAccessTokenExpiredAt DateTime   @db.Timestamp()
   firstName                    String
   lastName                     String
-  email                        String              @unique
+  email                        String     @unique
   hash                         String
   level                        Int?
-  publicId                     String              @unique @default(uuid())
+  publicId                     String     @unique @default(uuid())
   sessions                     Session[]
-  businesses                   Business[]          @relation("MyUserBusinessTable")
-  providerCredentials          ProviderCredential? @relation("User-provider", fields: [providerCredentialsId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  providerCredentialsId        Int?
+  businesses                   Business[] @relation("MyUserBusinessTable")
 
   @@map("user")
 }
 
 model Business {
-  id                 Int        @id @default(autoincrement())
-  orderingBusinessId String     @unique
-  publicId           String     @unique @default(uuid())
+  id                 Int                 @id @default(autoincrement())
+  orderingBusinessId String              @unique
+  publicId           String              @unique @default(uuid())
   name               String
-  owners             User[]     @relation("MyUserBusinessTable")
-  sessions           Session[]  @relation("BusinessSessionTable")
+  owners             User[]              @relation("MyUserBusinessTable")
+  sessions           Session[]           @relation("BusinessSessionTable")
   logo               String?
   email              String?
   phone              String?
   address            String?
   description        String?
-  timeZone           String     @default("Europe/Helsinki")
-  orders             Order[]    @relation("BusinessOrder")
-  enabled            Boolean    @default(true)
-  open               Boolean    @default(true)
-  provider           Provider[] @relation("Provider")
+  timeZone           String              @default("Europe/Helsinki")
+  orders             Order[]             @relation("BusinessOrder")
+  enabled            Boolean             @default(true)
+  open               Boolean             @default(true)
+  provider           BusinessProviders[]
 
   @@map("business")
 }
 
+model BusinessProviders {
+  orderingBusinessId String
+  providerId         String   @id @unique
+  business           Business @relation(fields: [orderingBusinessId], references: [orderingBusinessId], onUpdate: Cascade, onDelete: Cascade)
+  provider           Provider @relation(fields: [providerId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+}
+
 model Provider {
-  id                 Int      @unique @default(autoincrement())
-  orderingBusinessId String   @unique
-  business           Business @relation("Provider", fields: [orderingBusinessId], references: [orderingBusinessId], onDelete: Cascade, onUpdate: Cascade)
-  name               String
-  providerId         String   @unique
-  open               Boolean  @default(true)
-  enabled            Boolean  @default(true)
-  ipadFree           Boolean?
+  id          String              @id
+  name        String
+  open        Boolean             @default(true)
+  enabled     Boolean             @default(true)
+  ipadFree    Boolean?
+  credentials Credential[]
+  businesses  BusinessProviders[]
+}
+
+model Credential {
+  id           Int        @id @default(autoincrement())
+  name         String
+  providerName String
+  businessName String       @default("")
+  type         String
+  data         Json?
+  providers    Provider[]
+
+  @@map("credential")
 }
 
 model Order {
@@ -190,8 +198,6 @@ model SubOption {
   options     Option  @relation("option-suboption", fields: [optionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 }
 
-//Order summary price
-
 //Order offer
 model Offer {
   id        String        @id @unique @default(uuid())
@@ -233,3 +239,15 @@ model ActiveStatusQueue {
 
   @@map("active_status_queue")
 }
+
+model MenuTracking {
+  id               Int      @id @default(autoincrement())
+  businessPublicId String   @unique
+  name             String
+  type             String
+  lastUpdated      DateTime @default(now()) @db.Timestamp()
+  synchronizeTime  DateTime
+  processing       Boolean  @default(false)
+  onCooldown       Boolean  @default(false)
+}
+

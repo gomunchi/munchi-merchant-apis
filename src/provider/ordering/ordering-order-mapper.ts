@@ -32,7 +32,9 @@ export class OrderingOrderMapperService {
     const preorder: boolean = orderingOrder.reporting_data.at.hasOwnProperty(`status:13`);
     const productDto = plainToInstance(ProductDto, orderingOrder.products);
     const offers = plainToInstance(OfferDto, orderingOrder.offers);
-    const orderStatus = this.mapOrderingStatusToOrderStatus(orderingOrder.status) as string;
+    const orderStatus = this.mapOrderingStatusToOrderStatus(
+      orderingOrder.status,
+    ) as AvailableOrderStatus;
     const business = await this.validateOrderingBusiness(orderingOrder.business_id.toString());
     const inputFormat = 'YYYY-MM-DD HH:mm:ss';
     let lastModified: string | null = null;
@@ -58,6 +60,10 @@ export class OrderingOrderMapperService {
       ? moment.utc(orderingOrder.created_at, inputFormat).local().toISOString(true)
       : null;
 
+    const userName = `${orderingOrder.customer.name ? orderingOrder.customer.name : 'Guest'} ${
+      orderingOrder.customer.lastname ? orderingOrder.customer.lastname : 'User'
+    }`;
+
     return {
       id: orderingOrder.id.toString(),
       orderId: orderingOrder.id.toString(),
@@ -78,7 +84,7 @@ export class OrderingOrderMapperService {
         total: total.toString(), // This should be equal to subtotal as we don't need delivery fee
       },
       customer: {
-        name: `${orderingOrder.customer.name} ${orderingOrder.customer.lastname}`,
+        name: userName,
         phone: orderingOrder.customer.cellphone,
       },
       deliveryEta: deliveryDatetime,

@@ -1,21 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { OrderingMenuCategory } from '../ordering/dto/ordering-menu.dto';
+import { Injectable } from '@nestjs/common';
 import {
   ItemBinding,
-  OptionBinding,
   MenuData,
-  MenuItem,
-  TranslatedText,
-  WoltCategory as WoltMenuCategory,
   MenuItemOption,
   MenuItemOptionValue,
+  OptionBinding,
+  TranslatedText,
 } from './dto/wolt-menu.dto';
 import { WoltLanguageCode } from './wolt.type';
 
 @Injectable()
 export class WoltMenuMapperService {
-  constructor() {}
-
   mapToOrderingCategory(woltMenuData: MenuData) {
     const { menu } = woltMenuData;
 

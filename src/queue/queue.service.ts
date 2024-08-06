@@ -145,16 +145,16 @@ export class QueueService {
       if (timeDiff == 0) {
         this.logger.warn(`Time to send reminder for order ${queue.orderNumber}`);
         await this.webhookService.remindPreOrder(queue);
-        await this.validatePreorderQueue(queue.orderId);
+        await this.validatePreorderQueue(queue.providerOrderId);
       }
     }
   }
 
   @OnEvent('preorderQueue.validate')
-  async validatePreorderQueue(orderId: number) {
+  async validatePreorderQueue(orderId: string) {
     const queue = await this.prismaService.preorderQueue.findUnique({
       where: {
-        orderId: orderId,
+        providerOrderId: orderId,
       },
     });
     if (queue) {
