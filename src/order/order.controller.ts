@@ -10,31 +10,19 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Query } from '@nestjs/common/decorators';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 
-import { SessionService } from 'src/auth/session.service';
 import { OrderData } from 'src/type';
-import { OrderRejectData, OrderStatusFilter } from './validation/order.validation';
 import { OrderService } from './order.service';
+import { OrderRejectData, OrderStatusFilter } from './validation/order.validation';
 
 @UseGuards(JwtGuard)
 @ApiBearerAuth('JWT-auth')
 @Controller('orders')
+@ApiTags('Order')
 export class OrderController {
-  constructor(private orderService: OrderService, private sessionService: SessionService) {}
-
-  //TODO: Need to refactor publicBussinessId use later, right now it come from session
-  @Get('filteredOrders')
-  async getFilteredOrders(
-    @Request() req: any,
-    @Query('query') query: string,
-    @Query('paramsQuery') paramsQuery: string[],
-    @Query('publicBusinessId') publicBusinessId: string,
-  ) {
-    const { sessionPublicId } = req.user;
-    return this.orderService.getFilteredOrdersForSession(sessionPublicId, query, paramsQuery);
-  }
+  constructor(private orderService: OrderService) {}
 
   @Get('orderByStatus')
   async getOrderByStatus(

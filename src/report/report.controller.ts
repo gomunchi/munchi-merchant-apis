@@ -8,7 +8,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { SessionService } from 'src/auth/session.service';
 
-@ApiTags('report')
+@ApiTags('Report')
 @Controller('report')
 export class ReportController {
   private readonly logger = new Logger(ReportController.name);

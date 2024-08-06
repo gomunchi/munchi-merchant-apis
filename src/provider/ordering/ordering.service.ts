@@ -70,6 +70,7 @@ export class OrderingService implements ProviderService {
       'offers',
       'paymethod_id',
     ].join(',');
+
     const options = {
       method: 'GET',
       url: `${this.utilService.getEnvUrl(
@@ -80,15 +81,21 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${accessToken}`,
       },
     };
+
     try {
       const response = await axios.request(options);
+
       return response.data.result;
     } catch (error) {
       this.utilService.logError(error);
     }
   }
 
-  async getOrderById(accessToken: string, orderId: string): Promise<OrderingOrder> {
+  async getOrderById(
+    accessToken: string,
+    orderId: string,
+    apiKey?: string,
+  ): Promise<OrderingOrder> {
     const options = {
       method: 'GET',
       url: `${this.utilService.getEnvUrl('orders', orderId)}?mode=dashboard`,
@@ -97,6 +104,10 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${accessToken}`,
       },
     };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
 
     try {
       const response = await axios.request(options);
@@ -303,16 +314,17 @@ export class OrderingService implements ProviderService {
     orderData: Omit<OrderData, 'provider'>,
   ): Promise<OrderingOrder> {
     const orderingOrder = await this.getOrderById(accessToken, orderId);
+
     const defaultStatus = {
-      pending: OrderingOrderStatus.Pending,
-      in_progress: OrderingOrderStatus.AcceptedByBusiness,
-      completed: OrderingOrderStatus.PreparationCompleted,
-      delivered:
-        orderingOrder.status === OrderingDeliveryType.Delivery
+      [OrderStatusEnum.PENDING]: OrderingOrderStatus.Pending,
+      [OrderStatusEnum.IN_PROGRESS]: OrderingOrderStatus.AcceptedByBusiness,
+      [OrderStatusEnum.COMPLETED]: OrderingOrderStatus.PreparationCompleted,
+      [OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER]: OrderingOrderStatus.PickUpCompletedByDriver,
+      [OrderStatusEnum.DELIVERED]:
+        orderingOrder.delivery_type === OrderingDeliveryType.Delivery
           ? OrderingOrderStatus.PickUpCompletedByDriver
           : OrderingOrderStatus.PickupCompletedByCustomer,
     };
-
     const status = defaultStatus[orderData.orderStatus];
 
     const options = {
@@ -322,10 +334,15 @@ export class OrderingService implements ProviderService {
         accept: 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      data: {
-        status: status,
-        prepared_in: orderData.preparedIn,
-      },
+      data:
+        orderData.orderStatus === OrderStatusEnum.PREORDER
+          ? {
+              prepared_in: orderData.preparedIn,
+            }
+          : {
+              status: status,
+              prepared_in: orderData.preparedIn,
+            },
     };
 
     try {
@@ -459,10 +476,6 @@ export class OrderingService implements ProviderService {
         .toISOString(true);
     }
 
-    const deliveryDatetime = orderingOrder.delivery_datetime
-      ? moment.utc(orderingOrder.delivery_datetime, inputFormat).local().toISOString(true)
-      : null;
-
     // Assuming the input time is in UTC, convert to local time
 
     this.utilService.convertTimeToTimeZone(
@@ -475,8 +488,9 @@ export class OrderingService implements ProviderService {
 
     return {
       id: orderingOrder.id.toString(),
+      orderId: orderingOrder.id.toString(),
+      orderNumber: orderingOrder.id.toString(),
       business: {
-        orderingBusinessId: business.orderingBusinessId,
         logo: business.logo,
         name: business.name,
         publicId: business.publicId,
@@ -495,7 +509,7 @@ export class OrderingService implements ProviderService {
         name: `${orderingOrder.customer.name} ${orderingOrder.customer.lastname}`,
         phone: orderingOrder.customer.cellphone,
       },
-      deliveryEta: deliveryDatetime,
+      deliveryEta: orderingOrder.delivery_datetime,
       pickupEta: null,
       lastModified: lastModified,
       provider: ProviderEnum.Munchi,
@@ -504,8 +518,11 @@ export class OrderingService implements ProviderService {
       preparedIn: orderingOrder.prepared_in,
       preorder: preorder
         ? {
-            status: OrderResponsePreOrderStatusEnum.Waiting,
-            preorderTime: deliveryDatetime,
+            status:
+              !orderingOrder.prepared_in && orderingOrder.status === OrderingOrderStatus.Preorder
+                ? OrderResponsePreOrderStatusEnum.Waiting
+                : OrderResponsePreOrderStatusEnum.Confirm,
+            preorderTime: orderingOrder.delivery_datetime,
           }
         : null,
       products: productDto,
@@ -531,23 +548,29 @@ export class OrderingService implements ProviderService {
     orderStatus?: AvailableOrderStatus[],
   ): string | number[] {
     if (orderingStatus !== undefined) {
-      if (pendingStatus.includes(orderingStatus)) {
-        return OrderStatusEnum.PENDING as string;
-      } else if (inProgressStatus.includes(orderingStatus)) {
-        return OrderStatusEnum.IN_PROGRESS as string;
-      } else if (completedStatus.includes(orderingStatus)) {
-        return OrderStatusEnum.COMPLETED as string;
-      } else if (deliveredStatus.includes(orderingStatus)) {
-        return OrderStatusEnum.COMPLETED as string;
-      } else {
-        return OrderStatusEnum.REJECTED as string;
+      const status = {
+        [OrderingOrderStatus.Preorder]: OrderStatusEnum.PREORDER,
+        [OrderingOrderStatus.Pending]: OrderStatusEnum.PENDING,
+        [OrderingOrderStatus.AcceptedByBusiness]: OrderStatusEnum.IN_PROGRESS,
+        [OrderingOrderStatus.AcceptedByDriver]: OrderStatusEnum.DRIVER_FOUND,
+        [OrderingOrderStatus.PreparationCompleted]: OrderStatusEnum.COMPLETED,
+        [OrderingOrderStatus.PickUpCompletedByDriver]: OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER,
+      };
+
+      if (rejectedStatus.includes(orderingStatus)) {
+        return OrderStatusEnum.REJECTED;
       }
+
+      return status[orderingStatus];
     }
 
     if (orderStatus !== undefined && orderStatus.length > 0) {
       if (orderStatus.includes(OrderStatusEnum.PENDING)) {
         return pendingStatus as number[];
-      } else if (orderStatus.includes(OrderStatusEnum.IN_PROGRESS)) {
+      } else if (
+        orderStatus.includes(OrderStatusEnum.IN_PROGRESS) ||
+        orderStatus.includes(OrderStatusEnum.DRIVER_FOUND)
+      ) {
         return inProgressStatus as number[];
       } else if (orderStatus.includes(OrderStatusEnum.COMPLETED)) {
         return completedStatus as number[];

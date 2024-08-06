@@ -1,5 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -35,7 +34,6 @@ export class ApiKeyService {
         },
       },
     });
-    console.log('🚀 ~ ApiKeyService ~ createApiKey ~ apiKey:', apiKey);
 
     if (!apiKey) {
       return await this.prismaService.apiKey.create({

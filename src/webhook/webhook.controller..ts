@@ -1,11 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Body, Controller, Post, Req } from '@nestjs/common';
-import { WebhookService } from './webhook.service';
-import { ConfigService } from '@nestjs/config';
+import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { WoltOrderNotification } from 'src/provider/wolt/wolt.type';
+import { WebhookService } from './webhook.service';
 
 @Controller('webhook')
+@ApiTags('Webhook')
 export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 

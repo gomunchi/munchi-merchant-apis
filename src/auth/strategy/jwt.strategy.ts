@@ -1,11 +1,10 @@
-import { SessionService } from 'src/auth/session.service';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { JwtTokenPayload } from '../session.type';
+import { SessionService } from 'src/auth/session.service';
 import { UserService } from 'src/user/user.service';
-import { Prisma } from '@prisma/client';
+import { JwtTokenPayload } from '../session.type';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {

@@ -29,6 +29,8 @@ export enum OrderingOrderStatus {
   DriverWaitingForOrder = 24,
   AcceptedByDriverCompany = 25,
 }
+
+export const preorderStatus = [OrderingOrderStatus.Preorder];
 export const pendingStatus = [OrderingOrderStatus.Pending, OrderingOrderStatus.Preorder];
 export const inProgressStatus = [
   OrderingOrderStatus.AcceptedByBusiness,
@@ -136,6 +138,9 @@ export class OrderingBusiness {
 
   @Expose()
   today: number;
+
+  @Expose()
+  enabled: boolean;
 
   @Expose()
   open: boolean;
@@ -351,6 +356,7 @@ export interface OrderingCustomer {
 
 export interface OrderingOrder extends Order {
   reporting_data: OrderingOrderReportingData;
+  prepared_in: string;
   summary: OrderingOrderSummary;
   products: OrderingOrderProduct[];
   customer: OrderingCustomer;

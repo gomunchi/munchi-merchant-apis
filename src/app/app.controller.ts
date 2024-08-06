@@ -6,12 +6,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): string {
+  welcome() {
     return this.appService.getHello();
-  }
-
-  @Get()
-  test(): string {
-    throw new ForbiddenException('tesgint');
   }
 }

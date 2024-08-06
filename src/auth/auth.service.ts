@@ -1,15 +1,14 @@
 import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Cryptr from 'cryptr';
+import { Prisma } from '@prisma/client';
 import moment from 'moment';
 import { UserResponse } from 'src/auth/dto/auth.dto';
-import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { AuthCredentials } from 'src/type';
 import { UserService } from 'src/user/user.service';
 import { UtilsService } from 'src/utils/utils.service';
 import { SessionService } from './session.service';
-import { Prisma } from '@prisma/client';
 import { JwtTokenPayload } from './session.type';
 
 @Injectable()
@@ -109,5 +108,7 @@ export class AuthService {
     await this.sessionService.deleteSession({
       publicId: sessionPublicId,
     });
+
+    return { message: 'Logout successfully' };
   }
 }

@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
-import axios, { AxiosHeaders } from 'axios';
+import { Prisma, Provider } from '@prisma/client';
+import axios from 'axios';
+import moment from 'moment';
 import {
   AvailableOrderStatus,
   OrderResponse,
@@ -14,39 +15,27 @@ import { OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { ProviderService } from '../provider.service';
-import { ProviderEnum, ProviderOrder } from '../provider.type';
-import {
-  WoltItem,
-  WoltOrder,
-  WoltOrderNotification,
-  WoltOrderType,
-  WoltOrderPrismaSelectArgs,
-  AvailableWoltOrderStatus,
-} from './wolt.type';
-import moment from 'moment';
+import { ProviderEnum } from '../provider.type';
+import { WoltItem, WoltOrder, WoltOrderPrismaSelectArgs, WoltOrderType } from './wolt.type';
 
 @Injectable()
 export class WoltService implements ProviderService {
   private readonly logger = new Logger(ProviderService.name);
   private woltApiUrl: string;
-  private woltApiKey: string;
-  private header: AxiosHeaders;
 
   constructor(
     private configService: ConfigService,
     private prismaService: PrismaService,
     private utilsService: UtilsService,
   ) {
-    this.woltApiUrl = this.configService.get('WOLT_API_DEV_URL');
-    this.woltApiKey = this.configService.get('WOLT_API_KEY');
-    this.header = {
-      'WOLT-API-KEY': this.woltApiKey,
-    } as any;
+    this.woltApiUrl = this.configService.get('WOLT_API_URL');
   }
+
   async getOrderByStatus(
     accessToken: string,
     status: AvailableOrderStatus[],
     businessIds: string[],
+    orderBy?: Prisma.OrderOrderByWithRelationInput,
   ): Promise<any[]> {
     const orders = await this.prismaService.order.findMany({
       where: {
@@ -57,12 +46,25 @@ export class WoltService implements ProviderService {
           in: businessIds,
         },
       },
-      orderBy: {
-        id: 'desc',
-      },
+      orderBy: orderBy,
       include: WoltOrderPrismaSelectArgs,
     });
+
     return orders;
+  }
+
+  async getApiKeybyVenueId(venueId: string): Promise<string> {
+    const businessProvider = await this.prismaService.provider.findUnique({
+      where: {
+        providerId: venueId,
+      },
+    });
+
+    if (!businessProvider) {
+      throw new NotFoundException('No provider found associated with this venue ID.');
+    }
+
+    return businessProvider.apiKey;
   }
 
   public async getAllOrder() {
@@ -94,12 +96,16 @@ export class WoltService implements ProviderService {
    *
    * @return  {Promise<WoltOrder>}              A promise that resolves with the Wolt order data from the Wolt server.
    */
-  public async getOrderById(woltOrdeId: string): Promise<WoltOrder> {
+  public async getOrderById(woltOrdeId: string, venueId: string): Promise<WoltOrder> {
+    const woltVenueApiKey = await this.getApiKeybyVenueId(venueId);
+
     try {
       const response = await axios.request({
         method: 'GET',
         baseURL: `${this.woltApiUrl}/orders/${woltOrdeId}`,
-        headers: this.header as any,
+        headers: {
+          'WOLT-API-KEY': woltVenueApiKey,
+        },
       });
 
       return response.data;
@@ -111,12 +117,16 @@ export class WoltService implements ProviderService {
   async sendWoltUpdateRequest(
     woltOrderId: string,
     endpoint: string,
+    orderType: WoltOrderType,
+    provider: Provider,
     updateData?: Omit<OrderData, 'provider'>,
   ) {
     const option = {
       method: 'PUT',
       baseURL: `${this.woltApiUrl}/orders/${woltOrderId}/${endpoint}`,
-      headers: this.header as any,
+      headers: {
+        'WOLT-API-KEY': provider.apiKey,
+      },
       data:
         endpoint === 'reject'
           ? {
@@ -124,25 +134,20 @@ export class WoltService implements ProviderService {
                 ? updateData.reason
                 : 'Your order has been rejected, please contact the restaurant for more info',
             }
-          : endpoint === 'accept'
+          : endpoint === 'accept' && orderType === WoltOrderType.Instant
           ? {
               adjusted_pickup_time: updateData.preparedIn,
-            }
-          : endpoint === 'reject'
-          ? {
-              reason: updateData.reason,
             }
           : null,
     };
     try {
       const response = await axios.request(option);
-
       return response.data;
     } catch (error: any) {
       this.logger.log(
         `Error when updating wolt Order with order id:${woltOrderId}. Error: ${error}`,
       );
-      await this.syncWoltOrder(woltOrderId);
+      await this.syncWoltOrder(woltOrderId, provider.providerId);
       throw new ForbiddenException(error);
     }
   }
@@ -162,37 +167,88 @@ export class WoltService implements ProviderService {
   public async updateOrder(
     accessToken: string,
     woltOrderId: string,
-    updateData: Omit<OrderData, 'provider'>,
+    { orderStatus, preparedIn }: Omit<OrderData, 'provider'>,
   ): Promise<any> {
-    console.log("🚀 ~ WoltService ~ updateData:", updateData)
-    const { orderStatus, preparedIn } = updateData;
-
-    //Get wolt order by id
     const order = await this.getOrderByIdFromDb(woltOrderId);
+
+    const businessProvider = await this.prismaService.provider.findUnique({
+      where: {
+        orderingBusinessId: order.orderingBusinessId,
+      },
+    });
+
     const updateEndPoint = this.generateWoltUpdateEndPoint(orderStatus, order as any);
-    const adjustedPickupTime = preparedIn
-      ? moment(order.createdAt).add(preparedIn, 'minutes').format()
-      : order.pickupEta;
 
-    
-
-    //Send request to wolt server
-    try {
-      await this.sendWoltUpdateRequest(order.orderId, updateEndPoint, {
-        orderStatus: OrderStatusEnum.IN_PROGRESS,
-        preparedIn: adjustedPickupTime,
-      });
-    } catch (error) {
-      this.logger.log(`Error when updatinbg order: ${error}`);
-      throw new ForbiddenException(error);
+    if (orderStatus === OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER) {
+      return this.updateAndReturn(order, null, orderStatus);
     }
 
+    try {
+      const adjustedPickupTime = preparedIn
+        ? moment(order.createdAt).add(preparedIn, 'minutes').format()
+        : order.pickupEta;
+
+      await this.sendWoltUpdateRequest(
+        order.orderId,
+        updateEndPoint,
+        order.type as WoltOrderType,
+        businessProvider,
+        {
+          orderStatus: OrderStatusEnum.IN_PROGRESS,
+          preparedIn: adjustedPickupTime,
+        },
+      );
+
+      if (
+        order.deliveryType === OrderingDeliveryType.Delivery &&
+        order.status === OrderStatusEnum.PENDING
+      ) {
+        const maxRetries = 10;
+        const retryInterval = 500;
+        const syncPickUpTime = await this.getOrderById(order.orderId, businessProvider.providerId);
+        const formattedSyncOrder = await this.mapOrderToOrderResponse(syncPickUpTime);
+
+        const woltOrderMoment = moment(formattedSyncOrder.pickupEta);
+        const formattedSyncOrderMoment = moment(order.pickupEta);
+
+        for (let i = 0; i < maxRetries; i++) {
+          if (!woltOrderMoment.isSame(formattedSyncOrderMoment, 'millisecond')) {
+            break; // Exit loop if pickup_eta is present
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, retryInterval));
+          }
+        }
+
+        await this.syncWoltOrder(order.orderId, businessProvider.providerId);
+      }
+
+      return this.updateAndReturn(order, preparedIn, orderStatus);
+    } catch (error) {
+      this.logger.log(`Error when updating order: ${error}`);
+      throw new ForbiddenException(error);
+    }
+  }
+
+  private async updateAndReturn(
+    order: any,
+    preparedIn: string | null,
+    orderStatus: AvailableOrderStatus,
+  ): Promise<any> {
+    const updatedOrder = await this.updateOrderInDatabase(order, preparedIn, orderStatus);
+    return updatedOrder;
+  }
+
+  async updateOrderInDatabase(
+    order: any,
+    preparedIn?: string,
+    orderStatus?: AvailableOrderStatus,
+  ): Promise<any> {
     const updatedOrder = await this.prismaService.order.update({
       where: {
         orderId: order.orderId,
       },
       data: {
-        preparedIn: preparedIn ? preparedIn : order.preparedIn,
+        preparedIn: preparedIn ?? order.preparedIn,
         status: orderStatus,
         preorder: order.preorder
           ? {
@@ -202,11 +258,11 @@ export class WoltService implements ProviderService {
               },
             }
           : undefined,
+        lastModified: moment().toISOString(true),
       },
       include: WoltOrderPrismaSelectArgs,
     });
-    // const woltOrder = await this.getOrderById(order.orderId);
-    // const mappedWoltOrder = await this.mapOrderToOrderResponse(woltOrder);
+
     return updatedOrder;
   }
 
@@ -218,12 +274,22 @@ export class WoltService implements ProviderService {
     },
   ) {
     const order = await this.getOrderByIdFromDb(orderId);
-
-    await this.sendWoltUpdateRequest(order.orderId, 'reject', {
-      reason: orderRejectData.reason,
-      orderStatus: OrderStatusEnum.REJECTED,
-      preparedIn: null,
+    const businessProvider = await this.prismaService.provider.findUnique({
+      where: {
+        orderingBusinessId: order.orderingBusinessId,
+      },
     });
+    await this.sendWoltUpdateRequest(
+      order.orderId,
+      'reject',
+      order.type as WoltOrderType,
+      businessProvider,
+      {
+        reason: orderRejectData.reason,
+        orderStatus: OrderStatusEnum.REJECTED,
+        preparedIn: null,
+      },
+    );
 
     const updatedOrder = await this.prismaService.order.update({
       where: {
@@ -237,8 +303,50 @@ export class WoltService implements ProviderService {
     return updatedOrder;
   }
 
-  public async deleteOrder<OrderResponse>(woltOrdeId: string): Promise<OrderResponse> {
-    return;
+  async getWoltBusinessById(woltVenueId: string) {
+    const woltVenueApiKey = await this.getApiKeybyVenueId(woltVenueId);
+
+    const option = {
+      method: 'GET',
+      baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/status`,
+      headers: {
+        'WOLT-API-KEY': woltVenueApiKey,
+      },
+    };
+    try {
+      const response = await axios.request(option);
+
+      return response.data;
+    } catch (error: any) {
+      // await this.syncWoltBusiness(woltOrderId);
+      throw new ForbiddenException(error);
+    }
+  }
+
+  // TODO: Get api key by business
+  async setWoltVenueStatus(woltVenueId: string, status: boolean, time?: string) {
+    const woltVenueApiKey = await this.getApiKeybyVenueId(woltVenueId);
+
+    const option = {
+      method: 'PATCH',
+      baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/online`,
+      headers: {
+        'WOLT-API-KEY': woltVenueApiKey,
+      },
+      data: {
+        status: status ? 'ONLINE' : 'OFFLINE',
+        until: time ? time : null,
+      },
+    };
+
+    try {
+      const response = await axios.request(option);
+
+      return response.data;
+    } catch (error: any) {
+      // await this.syncWoltBusiness(woltOrderId);
+      throw new ForbiddenException(error);
+    }
   }
 
   public mapWoltItemToProductDto(woltItems: WoltItem[]): ProductDto[] {
@@ -267,7 +375,7 @@ export class WoltService implements ProviderService {
     }));
   }
 
-  public async mapOrderToOrderResponse(woltOrder: ProviderOrder): Promise<OrderResponse> {
+  public async mapOrderToOrderResponse(woltOrder: WoltOrder): Promise<OrderResponse> {
     let deliverytype: number;
 
     //Find business by venue id
@@ -299,6 +407,7 @@ export class WoltService implements ProviderService {
       delivered: OrderStatusEnum.DELIVERED,
       rejected: OrderStatusEnum.REJECTED,
     };
+
     const createdAt = this.utilsService.convertTimeToTimeZone(
       woltOrder.created_at,
       businessData.business.timeZone,
@@ -308,12 +417,10 @@ export class WoltService implements ProviderService {
       woltOrder.modified_at,
       businessData.business.timeZone,
     );
-
     const pickupEta = this.utilsService.convertTimeToTimeZone(
       woltOrder.pickup_eta,
       businessData.business.timeZone,
     );
-
     const preOrderTime =
       woltOrder.type === WoltOrderType.PreOrder && woltOrder.pre_order !== null
         ? this.utilsService.convertTimeToTimeZone(
@@ -330,9 +437,10 @@ export class WoltService implements ProviderService {
       : null;
 
     return {
-      id: woltOrder.id.toString(),
+      id: woltOrder.id,
+      orderNumber: woltOrder.order_number,
+      orderId: woltOrder.id,
       business: {
-        orderingBusinessId: businessData.business.orderingBusinessId.toString(),
         logo: businessData.business.logo,
         name: businessData.business.name,
         publicId: businessData.business.publicId,
@@ -388,9 +496,9 @@ export class WoltService implements ProviderService {
   }
 
   private async validateBusinessByVenueId(woltVenueId: string) {
-    const business = await this.prismaService.businessExtraSetting.findUnique({
+    const business = await this.prismaService.provider.findUnique({
       where: {
-        value: woltVenueId,
+        providerId: woltVenueId,
       },
       select: {
         business: true,
@@ -431,9 +539,9 @@ export class WoltService implements ProviderService {
    *
    * @return  {[string]}               [return void]
    */
-  async syncWoltOrder(woltOrderId: string): Promise<any> {
+  async syncWoltOrder(woltOrderId: string, venueId: string): Promise<any> {
     //Get order from wolt
-    const woltOrder = await this.getOrderById(woltOrderId);
+    const woltOrder = await this.getOrderById(woltOrderId, venueId);
     // Mapp to general order response
     const mappedWoltOrder = await this.mapOrderToOrderResponse(woltOrder);
     //Init prisma validator
@@ -445,6 +553,7 @@ export class WoltService implements ProviderService {
       createdAt: mappedWoltOrder.createdAt,
       comment: mappedWoltOrder.comment,
       type: mappedWoltOrder.type,
+      orderNumber: mappedWoltOrder.orderNumber,
       preorder: mappedWoltOrder.preorder
         ? {
             update: {
@@ -495,7 +604,7 @@ export class WoltService implements ProviderService {
         provider: mappedWoltOrder.provider,
         business: {
           connect: {
-            orderingBusinessId: mappedWoltOrder.business.orderingBusinessId,
+            publicId: mappedWoltOrder.business.publicId,
           },
         },
         customer: {
@@ -509,6 +618,7 @@ export class WoltService implements ProviderService {
             total: mappedWoltOrder.summary.total,
           },
         },
+        orderNumber: mappedWoltOrder.orderNumber,
         table: mappedWoltOrder.table,
         deliveryEta: mappedWoltOrder.deliveryEta,
         pickupEta: mappedWoltOrder.pickupEta,

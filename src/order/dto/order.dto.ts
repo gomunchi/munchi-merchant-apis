@@ -85,9 +85,9 @@ export class OrderDto {
 export type OrderResponse = {
   id: string;
   provider: string;
-
+  orderId: string;
+  orderNumber: string;
   business: {
-    orderingBusinessId: string;
     publicId: string;
     name: string;
     logo: string | null;
@@ -137,7 +137,9 @@ export enum OrderStatusEnum {
   REJECTED = 'rejected',
   COMPLETED = 'completed',
   PREORDER = 'preorder',
+  DRIVER_FOUND = 'driver_found',
   DELIVERED = 'delivered',
+  PICK_UP_COMPLETED_BY_DRIVER = 'pick_up_completed_by_driver',
 }
 
 export type AvailableOrderStatus =
@@ -146,4 +148,6 @@ export type AvailableOrderStatus =
   | OrderStatusEnum.REJECTED
   | OrderStatusEnum.COMPLETED
   | OrderStatusEnum.DELIVERED
-  | OrderStatusEnum.PREORDER;
+  | OrderStatusEnum.PREORDER
+  | OrderStatusEnum.DRIVER_FOUND
+  | OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER;

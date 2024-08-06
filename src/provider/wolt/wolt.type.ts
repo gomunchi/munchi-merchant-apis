@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { AvailableOrderResponsePreOrderStatusEnum } from 'src/order/dto/order.dto';
 
 export interface WoltCoordinate {
   lon: number;
@@ -106,7 +107,7 @@ export interface WoltOption {
 
 export interface WoltPreOrder {
   preorder_time: string;
-  pre_order_status: string;
+  pre_order_status: AvailableOrderResponsePreOrderStatusEnum;
 }
 
 export enum WoltOrderType {
@@ -159,6 +160,7 @@ export const WoltOrderPrismaSelectArgs = Prisma.validator<Prisma.OrderInclude>()
       email: true,
       phone: true,
       description: true,
+      timeZone: true,
     },
   },
   customer: {

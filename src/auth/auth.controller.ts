@@ -1,29 +1,28 @@
 import {
-  Controller,
-  Post,
   Body,
-  UseGuards,
+  Controller,
   Get,
-  Request,
-  Delete,
-  Req,
   Param,
+  Post,
   Put,
+  Req,
+  Request,
+  UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { AuthCredentials } from 'src/type';
+import { ApiKeyService } from './apiKey.service';
 import { AuthService } from './auth.service';
 import { AuthReponseDto } from './dto/auth.dto';
-import { RefreshJwt } from './guard/refreshJwt.guard';
-import { JwtGuard } from './guard/jwt.guard';
-import { SessionService } from './session.service';
 import { ApiKeyGuard } from './guard/apiKey.guard';
+import { JwtGuard } from './guard/jwt.guard';
+import { RefreshJwt } from './guard/refreshJwt.guard';
+import { SessionService } from './session.service';
 import { ApiKeyData } from './validation';
-import { ApiKeyService } from './apiKey.service';
 
 @Controller('auth')
-@ApiTags('auth')
+@ApiTags('Auth')
 export class AuthController {
   constructor(
     private authService: AuthService,

@@ -16,13 +16,11 @@ import { ReportAppBusinessDto } from 'src/report/dto/report.dto';
 import { AuthCredentials } from 'src/type';
 import { UserService } from 'src/user/user.service';
 import { UtilsService } from 'src/utils/utils.service';
-import { AuthService } from './auth.service';
 import { JwtTokenPayload } from './session.type';
 
 @Injectable()
 export class SessionService {
   constructor(
-    @Inject(forwardRef(() => AuthService)) private authService: AuthService,
     @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
     @Inject(forwardRef(() => UserService)) private userService: UserService,
     @Inject(forwardRef(() => OrderingService))

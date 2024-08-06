@@ -16,20 +16,19 @@ import {
   ApiCreatedResponse,
   ApiTags,
 } from '@nestjs/swagger';
-import { Prisma } from '@prisma/client';
+import { ApiKeyGuard } from 'src/auth/guard/apiKey.guard';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from './business.service';
 import { BusinessDto, SetOnlineStatusDto } from './dto/business.dto';
-import { ApiKeyGuard } from 'src/auth/guard/apiKey.guard';
-import { BusinessExtraConfigDto } from './validation';
+import { ProviderDto } from './validation';
 
 @Controller('business')
 @ApiBearerAuth('JWT-auth')
 @ApiBadRequestResponse({
   description: 'Something wrong happened',
 })
-@ApiTags('business')
+@ApiTags('Business')
 export class BusinessController {
   constructor(private businessService: BusinessService, private sessionService: SessionService) {}
 
@@ -59,21 +58,8 @@ export class BusinessController {
   @Get('session-business')
   async getBusinessInSession(@Request() req: any) {
     const { sessionPublicId } = req.user;
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
-      select: {
-        businesses: {
-          select: {
-            publicId: true,
-          },
-        },
-      },
-    });
 
-    const session = await this.sessionService.getSessionByPublicId<
-      Prisma.SessionGetPayload<typeof findSessionArgs>
-    >(sessionPublicId, findSessionArgs);
-
-    return session.businesses;
+    return this.businessService.getBusinessInSession(sessionPublicId);
   }
 
   @ApiCreatedResponse({
@@ -94,7 +80,7 @@ export class BusinessController {
   @UseGuards(JwtGuard)
   @Post('online-status')
   async setOnlineStatus(@Request() req: any, @Body() body: SetOnlineStatusDto) {
-    const { status, duration, id: publicBusinessId } = body;
+    const { status, duration, id: businessPublicId, provider } = body;
 
     if (status === false && !duration) {
       throw new BadRequestException('duration is needed when status is false');
@@ -102,8 +88,9 @@ export class BusinessController {
 
     const { userPublicId } = req.user;
     return this.businessService.setOnlineStatusByPublicId(
+      provider,
       userPublicId,
-      publicBusinessId,
+      businessPublicId,
       status,
       duration,
     );
@@ -113,20 +100,14 @@ export class BusinessController {
     description: 'Add an extra business config for a specific extra business',
   })
   @UseGuards(ApiKeyGuard)
-  @Post('business-extra-config')
-  async setExtraConfig(
-    @Request() req: any,
-    @Body(new ValidationPipe()) body: BusinessExtraConfigDto,
-  ) {
-    const { name, value, id: businessPublicId } = body;
+  @Post('add-provider')
+  async setExtraConfig(@Body(new ValidationPipe()) body: ProviderDto) {
+    const { name, id: businessPublicId, providerId, apiKey } = body;
 
-    if (!name || !value) {
-      throw new BadRequestException('Missing inputs');
-    }
-
-    return this.businessService.addBusinessExtraSetting(businessPublicId, {
+    return this.businessService.addBusinessProvider(businessPublicId, {
       name: name,
-      value: value,
+      providerId: providerId,
+      apiKey: apiKey,
     });
   }
 }

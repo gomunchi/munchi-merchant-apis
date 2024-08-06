@@ -47,39 +47,46 @@ model User {
 }
 
 model Business {
-  id                   Int                    @id @default(autoincrement())
-  orderingBusinessId   String                 @unique
-  publicId             String                 @unique @default(uuid())
-  name                 String
-  owners               User[]                 @relation("MyUserBusinessTable")
-  sessions             Session[]              @relation("BusinessSessionTable")
-  logo                 String?
-  email                String?
-  phone                String?
-  address              String?
-  description          String?
-  timeZone             String                 @default("Europe/Helsinki")
-  orders               Order[]                @relation("BusinessOrder")
-  businessExtraSetting BusinessExtraSetting[] @relation("BusinessExtraSettings")
+  id                 Int        @id @default(autoincrement())
+  orderingBusinessId String     @unique
+  publicId           String     @unique @default(uuid())
+  name               String
+  owners             User[]     @relation("MyUserBusinessTable")
+  sessions           Session[]  @relation("BusinessSessionTable")
+  logo               String?
+  email              String?
+  phone              String?
+  address            String?
+  description        String?
+  timeZone           String     @default("Europe/Helsinki")
+  orders             Order[]    @relation("BusinessOrder")
+  enabled            Boolean    @default(true)
+  open               Boolean    @default(true)
+  provider           Provider[] @relation("Provider")
 
   @@map("business")
 }
 
-model BusinessExtraSetting {
+model Provider {
   id                 Int      @unique @default(autoincrement())
   orderingBusinessId String   @unique
-  business           Business @relation("BusinessExtraSettings", fields: [orderingBusinessId], references: [orderingBusinessId])
-  name               String?
-  value              String?  @unique
+  business           Business @relation("Provider", fields: [orderingBusinessId], references: [orderingBusinessId])
+  name               String
+  providerId         String   @unique
+  apiKey             String   @default("")
+  open               Boolean  @default(true)
+  enabled            Boolean  @default(true)
+  ipadFree           Boolean?
 }
 
 model Order {
   id                 Int       @id @default(autoincrement())
   orderId            String    @unique
+  orderNumber        String    @default("0")
   provider           String
   orderingBusinessId String
   payMethodId        Int?
-  business           Business  @relation("BusinessOrder", fields: [orderingBusinessId], references: [orderingBusinessId])
+  business           Business  @relation("BusinessOrder", fields: [orderingBusinessId], references: [orderingBusinessId], onDelete: Cascade, onUpdate: Cascade)
   status             String
   deliveryType       Int
   table              Int?
@@ -89,7 +96,7 @@ model Order {
   type               String
   deliveryEta        String?
   pickupEta          String?
-  preorder           PreOrder? @relation("preorder")
+  preorder           Preorder? @relation("preorder")
   products           Product[] @relation("order-product")
   offers             Offer[]   @relation("order-offer")
   lastModified       String?
@@ -117,13 +124,25 @@ model Customer {
 }
 
 //Preorder
-model PreOrder {
-  id           Int     @id @default(autoincrement())
+model Preorder {
+  id           Int    @id @default(autoincrement())
   status       String
   preorderTime String
-  reminderTime String?
-  orderId      String  @unique
-  order        Order?  @relation("preorder", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+  orderId      String @unique
+  order        Order? @relation("preorder", fields: [orderId], references: [orderId], onDelete: Cascade, onUpdate: Cascade)
+}
+
+//Preorder Queue
+
+model PreorderQueue {
+  id               Int      @id @default(autoincrement())
+  orderId          Int      @unique
+  providerOrderId  String   @unique
+  businessPublicId String
+  processing       Boolean  @default(false)
+  reminderTime     DateTime
+  orderNumber      String
+  provider         String
 }
 
 //Order product

@@ -18,41 +18,27 @@ import { QueueService } from './../queue/queue.service';
 import { BusinessDto } from './dto/business.dto';
 
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { SessionService } from 'src/auth/session.service';
 import { OrderingBusiness } from 'src/provider/ordering/ordering.type';
+import { AvailableProvider, ProviderEnum } from 'src/provider/provider.type';
+import { WoltService } from 'src/provider/wolt/wolt.service';
 import { BusinessInfoSelectBase } from './business.type';
-import { BusinessExtraConfigDto } from './validation';
+import { ProviderDto } from './validation';
 
 @Injectable()
 export class BusinessService {
   private logger = new Logger(BusinessService.name);
   constructor(
     private utils: UtilsService,
+    private sessionService: SessionService,
     private readonly prismaService: PrismaService,
     private readonly userService: UserService,
+    private woltService: WoltService,
     @Inject(forwardRef(() => QueueService)) private queueService: QueueService,
     @Inject(forwardRef(() => OrderingService)) private orderingService: OrderingService,
   ) {}
-  async createBusiness(businsessData: any, orderingUserId: number) {
-    return await this.prismaService.business.create({
-      data: {
-        logo: businsessData.logo,
-        orderingBusinessId: businsessData.id,
-        name: businsessData.name,
-        owners: {
-          connect: {
-            orderingUserId: orderingUserId,
-          },
-        },
-      },
-      select: {
-        name: true,
-        publicId: true,
-        logo: true,
-      },
-    });
-  }
 
-  @Cron(CronExpression.EVERY_DAY_AT_2PM)
+  @Cron(CronExpression.EVERY_HOUR)
   async syncBusinessFromOrdering() {
     const orderingApiKey = await this.prismaService.apiKey.findFirst({
       where: {
@@ -93,10 +79,10 @@ export class BusinessService {
       phone: true,
       address: true,
       description: true,
-      businessExtraSetting: {
+      provider: {
         select: {
           name: true,
-          value: true,
+          providerId: true,
         },
       },
     });
@@ -124,6 +110,8 @@ export class BusinessService {
       address: businessInfo.address,
       description: businessInfo.description,
       timeZone: businessInfo.timezone,
+      enabled: businessInfo.enabled,
+      open: businessInfo.open,
     });
 
     return await this.prismaService.business.upsert({
@@ -134,6 +122,43 @@ export class BusinessService {
       update: data,
       select,
     });
+  }
+
+  async getBusinessInSession(sessionPublicId: string) {
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+      select: {
+        businesses: {
+          select: {
+            publicId: true,
+            logo: true,
+            email: true,
+            phone: true,
+            address: true,
+            description: true,
+            name: true,
+            open: true,
+            enabled: true,
+            provider: {
+              select: {
+                name: true,
+                providerId: true,
+                open: true,
+                enabled: true,
+              },
+            },
+          },
+          orderBy: {
+            id: 'desc',
+          },
+        },
+      },
+    });
+
+    const session = await this.sessionService.getSessionByPublicId<
+      Prisma.SessionGetPayload<typeof findSessionArgs>
+    >(sessionPublicId, findSessionArgs);
+
+    return session.businesses.map(({ publicId, ...rest }) => ({ id: publicId, ...rest }));
   }
 
   async businessOwnershipService(orderingId: number): Promise<BusinessDto[]> {
@@ -194,6 +219,7 @@ export class BusinessService {
    * @returns
    */
   async setOnlineStatusByPublicId(
+    provider: AvailableProvider,
     userPublicId: string,
     businessPublicId: string,
     status: boolean,
@@ -201,21 +227,15 @@ export class BusinessService {
   ) {
     const user = await this.userService.getUserByPublicId(userPublicId);
     const business = await this.getOrderingBusiness(user.orderingUserId, businessPublicId);
-
+    const providerInfo = await this.prismaService.provider.findFirst({
+      where: {
+        orderingBusinessId: business.id.toString(),
+      },
+    });
+    const localBusiness = await this.findBusinessByPublicId(businessPublicId);
     if (!business) {
       throw new NotFoundException('Cannot find business to set today schedule');
     }
-
-    const { schedule, timezone } = business;
-    const numberOfToday = moment().tz(timezone).weekday();
-    schedule[numberOfToday].enabled = status;
-    const accessToken = await this.utils.getOrderingAccessToken(user.orderingUserId);
-    const response = await this.orderingService.editBusiness(accessToken, business.id, {
-      schedule: JSON.stringify(schedule),
-    });
-
-    // The response from edit business Ordering Co does not return today so I need to set it from schedule
-    response.today = response.schedule[numberOfToday];
 
     if (status === false) {
       if (!duration) {
@@ -225,7 +245,7 @@ export class BusinessService {
       const time = moment.utc().add(duration, 'minutes').toDate();
 
       this.queueService.upsertActiveStatusQueue({
-        provider: 'munchi',
+        provider: provider,
         businessPublicId,
         userPublicId,
         time,
@@ -234,7 +254,45 @@ export class BusinessService {
       this.queueService.removeActiveStatusQueue(businessPublicId);
     }
 
-    return plainToInstance(BusinessDto, response);
+    if (provider === ProviderEnum.Munchi) {
+      await this.prismaService.business.update({
+        where: {
+          publicId: businessPublicId,
+        },
+        data: {
+          open: status,
+        },
+      });
+
+      const { schedule, timezone } = business;
+      const numberOfToday = moment().tz(timezone).weekday();
+      schedule[numberOfToday].enabled = status;
+      const accessToken = await this.utils.getOrderingAccessToken(user.orderingUserId);
+      const response = await this.orderingService.editBusiness(accessToken, business.id, {
+        schedule: JSON.stringify(schedule),
+      });
+
+      // The response from edit business Ordering Co does not return today so I need to set it from schedule
+      response.today = response.schedule[numberOfToday];
+
+      return plainToInstance(BusinessDto, response);
+    } else if (provider === ProviderEnum.Wolt) {
+      await this.prismaService.provider.update({
+        where: {
+          orderingBusinessId: localBusiness.orderingBusinessId,
+        },
+        data: {
+          open: status,
+        },
+      });
+
+      await this.woltService.setWoltVenueStatus(providerInfo.providerId, status);
+      //send request to wolt venue\
+
+      return {
+        message: 'Success',
+      };
+    }
   }
 
   async getBusinessById(userId: number, publicBusinessId: string) {
@@ -268,7 +326,7 @@ export class BusinessService {
         publicId: publicBusinessId,
       },
       include: {
-        businessExtraSetting: true,
+        provider: true,
       },
     });
   }
@@ -288,18 +346,18 @@ export class BusinessService {
   }
 
   async findBusinessByWoltVenueid(woltVenueId: string) {
-    const businessExtraSetting = await this.prismaService.businessExtraSetting.findUnique({
+    const provider = await this.prismaService.provider.findUnique({
       where: {
-        value: woltVenueId,
+        providerId: woltVenueId,
       },
       include: {
         business: true,
       },
     });
-    if (!businessExtraSetting || !businessExtraSetting.business) {
+    if (!provider || !provider.business) {
       throw new NotFoundException('No business found');
     }
-    return businessExtraSetting.business;
+    return provider.business;
   }
 
   async getAssociateSessions(condition: Prisma.BusinessWhereInput): Promise<
@@ -328,21 +386,19 @@ export class BusinessService {
     });
   }
 
-  async addBusinessExtraSetting(
-    businessPublicId: string,
-    data: Omit<BusinessExtraConfigDto, 'id'>,
-  ) {
+  async addBusinessProvider(businessPublicId: string, data: Omit<ProviderDto, 'id'>) {
     const business = await this.findBusinessByPublicId(businessPublicId);
     if (!business) {
       throw new NotFoundException("Business can't be found");
     }
-    const dataUpsert = Prisma.validator<Prisma.BusinessExtraSettingUncheckedCreateInput>()({
+    const dataUpsert = Prisma.validator<Prisma.ProviderUncheckedCreateInput>()({
       name: data.name,
-      value: data.value,
+      providerId: data.providerId,
+      apiKey: data.apiKey,
       orderingBusinessId: business.orderingBusinessId,
     });
 
-    await this.prismaService.businessExtraSetting.upsert({
+    await this.prismaService.provider.upsert({
       where: {
         orderingBusinessId: business.orderingBusinessId,
       },
@@ -350,7 +406,9 @@ export class BusinessService {
       update: dataUpsert,
     });
 
-    return 'Success';
+    return {
+      message: 'Added provider succesfully',
+    };
   }
 
   async saveMultipleBusinessToDb(businesses: BusinessDto[]) {

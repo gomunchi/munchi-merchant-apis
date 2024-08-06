@@ -12,6 +12,6 @@ ls -al node_modules/prisma
 
 npx prisma generate
 
-npx prisma db push --accept-data-loss
+npx prisma migrate deploy
 
 node ./dist/main.js

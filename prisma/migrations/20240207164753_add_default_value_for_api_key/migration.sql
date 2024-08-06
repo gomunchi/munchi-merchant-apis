@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Provider" ALTER COLUMN "providerId" DROP DEFAULT,
+ALTER COLUMN "apiKey" SET DEFAULT '';

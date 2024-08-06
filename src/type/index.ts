@@ -32,7 +32,7 @@ export interface OrderData {
   provider: AvailableProvider;
   preparedIn: string;
   orderStatus: AvailableOrderStatus;
-  reason?:string
+  reason?: string;
 }
 
 export type BusinessAttributes = {

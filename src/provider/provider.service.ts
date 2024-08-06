@@ -7,32 +7,22 @@ import { ProviderOrder } from './provider.type';
 
 @Injectable()
 export abstract class ProviderService {
-  async getAllOrder(accessToken: string, id: string): Promise<any> {
-    return;
-  }
+  abstract getAllOrder(accessToken: string, id: string): Promise<any>;
 
-  async getOrderById(accessToken: string, id: string): Promise<ProviderOrder> {
-    return;
-  }
+  abstract getOrderById(accessToken: string, id: string): Promise<ProviderOrder>;
 
   //Need business ids here as we need to get order from multiple businesses at a time
-  async getOrderByStatus(
+  abstract getOrderByStatus(
     accessToken: string,
     status: AvailableOrderStatus[],
     businessIds: string[],
-  ): Promise<OrderResponse[] | OrderingOrder[]> {
-    return;
-  }
+  ): Promise<OrderResponse[] | OrderingOrder[]>;
 
-  async updateOrder(
+  abstract updateOrder(
     accessToken: string,
     orderId: string,
     orderData: OrderData,
-  ): Promise<Order | OrderResponse> {
-    return;
-  }
+  ): Promise<Order | OrderResponse>;
 
-  async mapOrderToOrderResponse(order: ProviderOrder): Promise<OrderResponse> {
-    return;
-  }
+  abstract mapOrderToOrderResponse(order: ProviderOrder): Promise<OrderResponse>;
 }

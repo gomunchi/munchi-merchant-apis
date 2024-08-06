@@ -1,6 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { SessionService } from '../session.service';
 import { HeaderAPIKeyStrategy } from 'passport-headerapikey';
 import { ApiKeyService } from '../apiKey.service';
 

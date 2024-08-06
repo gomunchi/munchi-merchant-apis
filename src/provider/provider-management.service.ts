@@ -1,13 +1,20 @@
-import { Injectable } from '@nestjs/common';
-import { AvailableProvider, ProviderEnum } from './provider.type';
-import { WoltService } from './wolt/wolt.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { AvailableOrderStatus } from '../order/dto/order.dto';
 import { OrderingService } from './ordering/ordering.service';
 import { OrderingOrder } from './ordering/ordering.type';
-import { AvailableOrderStatus, OrderResponse } from '../order/dto/order.dto';
+import { AvailableProvider, ProviderEnum } from './provider.type';
+import { WoltService } from './wolt/wolt.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
 @Injectable()
 export class ProviderManagmentService {
-  constructor(private woltService: WoltService, private orderingService: OrderingService) {}
-
+  constructor(
+    private woltService: WoltService,
+    private orderingService: OrderingService,
+    private eventEmitter: EventEmitter2,
+  ) {}
+  private readonly logger = new Logger(ProviderManagmentService.name);
   async getAllOrder(provider: string[], { orderingToken }: { orderingToken: string }) {
     const woltOrder = this.woltService.getAllOrder();
     return woltOrder;
@@ -29,21 +36,34 @@ export class ProviderManagmentService {
 
     const formattedOrderingOrders = await Promise.all(
       orderingOrders.map(async (order: OrderingOrder) => {
+        this.logger.log(
+          `Success in retrieving order for ${order.business.name} with status ${order.status}`,
+        );
         return await this.orderingService.mapOrderToOrderResponse(order);
       }),
     );
 
     //If wolt provider included in the body data
     if (provider.includes(ProviderEnum.Wolt)) {
+      const orderBy = Prisma.validator<Prisma.OrderOrderByWithRelationInput>()({
+        id: 'asc',
+      });
+
       const woltOrders = await this.woltService.getOrderByStatus(
         orderingToken,
         status,
         businessOrderingIds,
+        orderBy,
       );
-      return [
-        ...woltOrders,
-        ...formattedOrderingOrders.sort((a, b) => parseInt(b.id) - parseInt(a.id)),
-      ];
+
+      const allOrders = [...woltOrders, ...formattedOrderingOrders];
+      const sortedOrders = allOrders.sort((a, b) => {
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      return sortedOrders;
     }
 
     return formattedOrderingOrders;
@@ -90,14 +110,18 @@ export class ProviderManagmentService {
     },
     { orderingToken }: { orderingToken: string },
   ) {
+    let order: any;
     if (provider === ProviderEnum.Wolt) {
-      return await this.woltService.rejectOrder(orderingToken, orderId, orderRejectData);
+      order = await this.woltService.rejectOrder(orderingToken, orderId, orderRejectData);
     } else if (provider === ProviderEnum.Munchi) {
       const orderingOrder = await this.orderingService.rejectOrder(orderingToken, orderId);
-      const order2 = await this.orderingService.mapOrderToOrderResponse(orderingOrder);
-      console.log('🚀 ~ ProviderManagmentService ~ order2:', order2);
-      return order2;
+      order = await this.orderingService.mapOrderToOrderResponse(orderingOrder);
     }
+
+    // Validating preoder queue in case preorder been rejected after confirmed
+    this.eventEmitter.emit('preorderQueue.validate', parseInt(orderId));
+
+    return order;
   }
 
   async validateProvider(providers: string[] | string): Promise<boolean> {

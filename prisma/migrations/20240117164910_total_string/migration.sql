@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "Summary" ALTER COLUMN "total" SET DATA TYPE TEXT;
