@@ -1,5 +1,5 @@
 import { Exclude, Expose, Type } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export interface OrderingProductCategory {
   id: number;
@@ -26,10 +26,50 @@ export interface OrderingCategoryExtraOptionSubOption {
   preselected: boolean;
 }
 
-export class MenuQuery {
+export class ValidatedBusinessId {
   @IsString()
   @IsNotEmpty()
   businessPublicId: string;
+}
+
+export class ValidatedProductBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsArray()
+  data: MenuProductDto[];
+}
+
+export class ValidatedCategoryBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsArray()
+  data: Omit<MenuCategoryDto, 'products'>[];
+}
+
+export class ValidatedSuboptionBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsArray()
+  data: (MenuProductOptionSuboptionDto & { extraId: string })[];
+}
+
+export class ValidatedMenuTrackingBody extends ValidatedBusinessId {
+  @IsNotEmpty()
+  @IsString()
+  type: string;
+
+  @IsNotEmpty()
+  @IsString()
+  timeSynchronize: string;
+}
+
+export class ValidatedProductId {
+  @IsString()
+  @IsNotEmpty()
+  productId: string;
+}
+
+export class ValidatedCategoryId {
+  @IsString()
+  @IsNotEmpty()
+  categoryId: string;
 }
 
 @Exclude()
@@ -64,4 +104,41 @@ export class MenuProductDto {
 
   @Expose()
   enabled: boolean;
+
+  @Expose({ name: 'category_id' })
+  categoryId: number;
+}
+
+@Exclude()
+export class MenuProductOptionDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  enabled: boolean;
+
+  @Expose({ name: 'extra_id' })
+  extraId: number;
+
+  @Expose()
+  @Type(() => MenuProductOptionSuboptionDto)
+  suboptions: MenuProductOptionSuboptionDto[];
+}
+
+@Exclude()
+export class MenuProductOptionSuboptionDto {
+  @Expose()
+  id: number;
+
+  @Expose()
+  name: string;
+
+  @Expose()
+  enabled: boolean;
+
+  @Expose({ name: 'extra_option_id' })
+  extraOptionId: number;
 }

@@ -95,7 +95,7 @@ export type OrderResponse = {
     address: string;
   };
   type: WoltOrderType;
-  status: string;
+  status: AvailableOrderStatus;
   deliveryType: number;
   createdAt: string;
   comment: string;

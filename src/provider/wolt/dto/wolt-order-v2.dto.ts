@@ -1,4 +1,4 @@
-import { WoltOrderType } from "./wolt-order.dto";
+import { WoltOrderType } from './wolt-order.dto';
 
 export interface WoltPriceBreakdownV2 {
   total_before_discounts: WoltPriceV2;

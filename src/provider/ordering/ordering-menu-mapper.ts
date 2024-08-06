@@ -62,7 +62,7 @@ export class OrderingMenuMapperService {
         price: categoryProduct.price,
         image_url: categoryProduct.images ? categoryProduct.images : '',
         external_data: categoryProduct.id.toString(),
-        enabled: true,
+        enabled: categoryProduct.enabled,
         options:
           categoryProduct.extras.length !== 0
             ? this.mapToWoltOptionFromOrdering(categoryProduct.extras[0].options).filter(Boolean)
@@ -88,10 +88,10 @@ export class OrderingMenuMapperService {
         ],
         type: productOption.max > 2 ? 'MultiChoice' : 'SingleChoice',
         values: productOption.suboptions.map(
-          (subOption: OrderingCategoryProductExtraSubOption, index: number): WoltOptionValue => ({
+          (subOption: OrderingCategoryProductExtraSubOption): WoltOptionValue => ({
             price: subOption.price,
             external_data: subOption.id.toString(),
-            enabled: true,
+            enabled: subOption.enabled,
             default: true,
             name: [
               {
