@@ -19,6 +19,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HistoryModule } from 'src/history/history.module';
 import { MenuModule } from 'src/menu/menu.module';
+import { ErrorHandlingModule } from 'src/error-handling/error-handling.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { MenuModule } from 'src/menu/menu.module';
     }),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
+    ErrorHandlingModule,
     MenuModule,
     CmsModule,
     BusinessModule,

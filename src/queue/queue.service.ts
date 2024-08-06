@@ -1,12 +1,13 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { ActiveStatusQueue, Prisma } from '@prisma/client';
+import { ActiveStatusQueue, PreorderQueue, Prisma } from '@prisma/client';
 import moment from 'moment';
 import { BusinessService } from 'src/business/business.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { WebhookService } from './../webhook/webhook.service';
 import { AvailableProvider } from 'src/provider/provider.type';
 import { OnEvent } from '@nestjs/event-emitter';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 
 @Injectable()
 export class QueueService {
@@ -15,6 +16,7 @@ export class QueueService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly webhookService: WebhookService,
+    private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
   ) {}
 
@@ -124,47 +126,56 @@ export class QueueService {
 
   @Interval(60000)
   async processingPreorderReminder() {
-    const processingQueue = await this.prismaService.preorderQueue.findMany({
-      where: {
-        processing: true,
-      },
-    });
-    this.logger.warn(`Processing queue preorder: ${processingQueue.length}`);
+    try {
+      const processingQueue = await this.prismaService.preorderQueue.findMany({
+        where: { processing: true },
+      });
+      this.logger.log(`Processing queue preorder: ${processingQueue.length}`);
 
-    if (processingQueue.length === 0) {
-      this.logger.warn('No processed preorders');
-      return;
+      if (processingQueue.length === 0) {
+        this.logger.log('No processed preorders');
+        return;
+      }
+
+      for (const queue of processingQueue) {
+        await this.processQueueItem(queue);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'processingPreorderReminder');
     }
+  }
 
-    for (const queue of processingQueue) {
+  private async processQueueItem(queue: PreorderQueue) {
+    try {
       const timeDiff = moment(queue.reminderTime).local().diff(moment(), 'minutes');
-      this.logger.warn(
+      this.logger.log(
         `${timeDiff} minutes left to remind order ${queue.orderNumber} at ${queue.reminderTime}`,
       );
 
-      if (timeDiff == 0) {
-        this.logger.warn(`Time to send reminder for order ${queue.orderNumber}`);
+      if (timeDiff === 0) {
+        this.logger.log(`Time to send reminder for order ${queue.orderNumber}`);
         await this.webhookService.remindPreOrder(queue);
         await this.validatePreorderQueue(queue.providerOrderId);
       }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'processQueueItem');
     }
   }
 
   @OnEvent('preorderQueue.validate')
   async validatePreorderQueue(orderId: string) {
-    const queue = await this.prismaService.preorderQueue.findUnique({
-      where: {
-        providerOrderId: orderId,
-      },
-    });
-    if (queue) {
-      await this.prismaService.preorderQueue.delete({
-        where: {
-          orderId: queue.orderId,
-        },
+    try {
+      const queue = await this.prismaService.preorderQueue.findUnique({
+        where: { providerOrderId: orderId },
       });
+      if (queue) {
+        await this.prismaService.preorderQueue.delete({
+          where: { orderId: queue.orderId },
+        });
+        this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
     }
-
-    return;
   }
 }

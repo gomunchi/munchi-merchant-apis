@@ -328,15 +328,11 @@ export class OrderingService implements ProviderService {
     try {
       const response = await axios.request(options);
 
-      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
-        response.data.result,
-      );
-
       if (orderData.orderStatus === OrderStatusEnum.PREORDER) {
-        this.eventEmitter.emit('zapier.trigger', formattedOrder);
+        this.eventEmitter.emit('zapier.trigger', response.data.result);
       }
 
-      return formattedOrder;
+      return response.data.result;
     } catch (error) {
       this.utilService.logError(error);
     }

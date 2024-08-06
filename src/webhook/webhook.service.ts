@@ -21,7 +21,7 @@ import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { OrderResponse } from 'src/order/dto/order.dto';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { UtilsService } from 'src/utils/utils.service';
@@ -46,6 +46,7 @@ export class WebhookService implements OnModuleInit {
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
     private utils: UtilsService,
     private notificationService: NotificationService,
+    private errorHandlingService: ErrorHandlingService,
     private woltService: WoltService,
     private orderingService: OrderingService,
     private orderingOrderMapperService: OrderingOrderMapperService,
@@ -184,13 +185,6 @@ export class WebhookService implements OnModuleInit {
     // Sync order again
     await this.woltService.syncWoltOrder(woltCredentials.value, woltWebhookdata.order.id);
 
-    // if (
-    //   formattedWoltOrder.type === WoltOrderType.PreOrder &&
-    //   woltWebhookdata.order.status === 'PRODUCTION'
-    // ) {
-    //   this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
-    // }
-
     //Log the last order
     if (woltWebhookdata.order.status === 'DELIVERED') {
       this.logger.log(`latest order: ${JSON.stringify(woltOrder)}`);
@@ -206,37 +200,58 @@ export class WebhookService implements OnModuleInit {
   }
 
   async remindPreOrder({ businessPublicId, orderId, provider }: PreorderQueue) {
-    const business = await this.businessService.findBusinessByPublicId(businessPublicId);
+    try {
+      const business = await this.businessService.findBusinessByPublicId(businessPublicId);
+      const orderingApiKey = await this.getOrderingApiKey();
+      const order = await this.getOrder(provider as ProviderEnum, orderId, orderingApiKey);
 
-    //Get munchi api key
-    const orderingApiKey = await this.prismaService.apiKey.findFirst({
-      where: {
-        name: 'ORDERING_API_KEY',
-      },
-    });
+      const message = `It's time for you to prepare order ${order.orderNumber}`;
+      await this.emitPreorderNotification(business.orderingBusinessId, message, order);
 
-    let order: any;
-    if (provider === ProviderEnum.Wolt) {
-      order = await this.woltRepositoryService.getOrderByIdFromDb(orderId.toString());
-    } else {
-      const orderingOrder = await this.orderingService.getOrderById(
-        '',
-        orderId.toString(),
-        orderingApiKey.value,
-      );
-      order = await this.orderingOrderMapperService.mapOrderToOrderResponse(orderingOrder);
+      this.logger.log(`Preorder reminder complete for ${business.publicId}`);
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'remindPreOrder');
     }
-    const message = `It's time for you to prepare order ${order.orderNumber}`;
-    this.server.to(business.orderingBusinessId).emit('preorder', {
-      message: message,
-      order: order,
-    });
+  }
 
-    this.logger.warn(`cron notify preorder reminder complete ${business.publicId}`);
-    // this.schedulerRegistry.deleteCronJob(order.id);
+  private async getOrder(provider: ProviderEnum, orderId: number, orderingApiKey: any) {
+    try {
+      if (provider === ProviderEnum.Wolt) {
+        return await this.woltRepositoryService.getOrderByIdFromDb(orderId.toString());
+      } else {
+        const orderingOrder = await this.orderingService.getOrderById(
+          '',
+          orderId.toString(),
+          orderingApiKey.value,
+        );
+        return await this.orderingOrderMapperService.mapOrderToOrderResponse(orderingOrder);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'getOrder');
+      throw error; // Re-throw as this is critical for further operations
+    }
+  }
+
+  private async emitPreorderNotification(businessId: string, message: string, order: any) {
+    try {
+      // Assuming you're using socket.io for emit
+      this.server.to(businessId).emit('preorder', { message, order });
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'emitPreorderNotification');
+    }
+  }
+  private async getOrderingApiKey() {
+    try {
+      return await this.prismaService.apiKey.findFirst({
+        where: { name: 'ORDERING_API_KEY' },
+      });
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'getOrderingApiKey');
+      throw error; // Re-throw as this is critical for further operations
+    }
   }
   @OnEvent('zapier.trigger')
-  async sendZapierWebhook(order: OrderResponse) {
+  async sendZapierWebhook(order: OrderingOrder) {
     try {
       const result = await this.zapierService.sendWebhook(order);
 

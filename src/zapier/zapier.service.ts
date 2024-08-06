@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosRequestConfig } from 'axios';
-import { OrderResponse } from 'src/order/dto/order.dto';
+import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 
 @Injectable()
 export class ZapierService {
@@ -10,7 +10,7 @@ export class ZapierService {
   constructor(private configService: ConfigService) {
     this.zapierUrl = this.configService.get('ZAPIER_URL');
   }
-  async sendWebhook(order: OrderResponse) {
+  async sendWebhook(order: OrderingOrder) {
     const options: AxiosRequestConfig = {
       method: 'POST',
       url: this.zapierUrl,
