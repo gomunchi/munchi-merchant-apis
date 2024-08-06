@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Business as BusinessPrisma, BusinessProviders, Provider } from '@prisma/client';
 import axios from 'axios';
 import { plainToInstance } from 'class-transformer';
 import { Business } from 'ordering-api-sdk';
@@ -8,16 +10,15 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthCredentials, OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { ProviderService } from '../provider.service';
+import { ProviderEnum } from '../provider.type';
 import { WoltCategory, WoltMenuData } from '../wolt/dto/wolt-menu.dto';
 import { WoltService } from '../wolt/wolt.service';
 import { OrderingMenuCategory } from './dto/ordering-menu.dto';
 import { OrderingOrder } from './dto/ordering-order.dto';
+import { OrderingMenuMapperService } from './ordering-menu-mapper';
 import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
 import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
-import { OrderingMenuMapperService } from './ordering-menu-mapper';
-import { Provider, Business as BusinessPrisma, BusinessProviders } from '@prisma/client';
-import { ProviderEnum } from '../provider.type';
 
 @Injectable()
 export class OrderingService implements ProviderService {
@@ -31,6 +32,7 @@ export class OrderingService implements ProviderService {
     private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly orderingSyncService: OrderingSyncService,
     private readonly woltService: WoltService,
+    private eventEmitter: EventEmitter2,
   ) {
     this.woltApiUrl = this.configService.get('WOLT_API_URL');
   }
@@ -329,6 +331,11 @@ export class OrderingService implements ProviderService {
       const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         response.data.result,
       );
+
+      if (orderData.orderStatus === OrderStatusEnum.PREORDER) {
+        this.eventEmitter.emit('zapier.trigger', formattedOrder);
+      }
+
       return formattedOrder;
     } catch (error) {
       this.utilService.logError(error);
