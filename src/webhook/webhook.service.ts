@@ -208,7 +208,9 @@ export class WebhookService implements OnModuleInit {
       const message = `It's time for you to prepare order ${order.orderNumber}`;
       await this.emitPreorderNotification(business.orderingBusinessId, message, order);
 
-      this.logger.log(`Preorder reminder complete for ${business.publicId}`);
+      this.logger.log(
+        `Preorder reminder complete for ${business.name} for order ${order.orderNumber}`,
+      );
     } catch (error) {
       this.errorHandlingService.handleError(error, 'remindPreOrder');
     }
