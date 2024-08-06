@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleInit,
+  forwardRef,
+} from '@nestjs/common';
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets/decorators';
 import { PreorderQueue } from '@prisma/client';
 import { Server } from 'socket.io';
@@ -13,11 +20,16 @@ import { WoltOrderMapperService } from 'src/provider/wolt/wolt-order-mapper';
 import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderResponsePreOrderStatusEnum, OrderStatusEnum } from 'src/order/dto/order.dto';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import {
+  OrderResponse,
+  OrderResponsePreOrderStatusEnum,
+  OrderStatusEnum,
+} from 'src/order/dto/order.dto';
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { UtilsService } from 'src/utils/utils.service';
+import { ZapierService } from 'src/zapier/zapier.service';
 import { NotificationService } from './../notification/notification.service';
 
 @WebSocketGateway({
@@ -44,6 +56,7 @@ export class WebhookService implements OnModuleInit {
     private orderingRepositoryService: OrderingRepositoryService,
     private prismaService: PrismaService,
     private woltOrderMapperService: WoltOrderMapperService,
+    private zapierService: ZapierService,
     private woltRepositoryService: WoltRepositoryService,
     private eventEmitter: EventEmitter2,
   ) {}
@@ -225,5 +238,18 @@ export class WebhookService implements OnModuleInit {
 
     this.logger.warn(`cron notify preorder reminder complete ${business.publicId}`);
     // this.schedulerRegistry.deleteCronJob(order.id);
+  }
+  @OnEvent('zapier.trigger')
+  async sendZapierWebhook(order: OrderResponse) {
+    try {
+      const result = await this.zapierService.sendWebhook(order);
+
+      this.logger.log(`Zapier webhook sent successfully for order: ${order.id}`);
+
+      return result;
+    } catch (error) {
+      this.logger.error(`error sendingZapierhook: ${JSON.stringify(error)}`);
+      throw new BadRequestException(error);
+    }
   }
 }
