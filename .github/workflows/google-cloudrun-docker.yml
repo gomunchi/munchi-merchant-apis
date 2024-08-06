@@ -2,7 +2,7 @@ name: Build and Deploy to Google Cloud
 
 on:
   push:
-    branches: [ development ]  # Trigger the workflow on push to main branch
+    branches: [ main ]  # Trigger the workflow on push to main branch
 
 env:
   REGISTRY: ${{ secrets.GCP_REGISTRY }}
@@ -32,15 +32,16 @@ jobs:
       run: |
         gcloud auth configure-docker ${{ env.REGISTRY }}
 
-    - name: Build Docker image
+    - name: Set execute permissions for scripts
       run: |
-        chmod +x ./build_cloud_image
-        ./build_cloud_image
+        chmod +x scripts/build_gcloud_image.sh
+        chmod +x scripts/push_gcloud_image.sh
+
+    - name: Build Docker image
+      run: ./scripts/build_gcloud_image.sh
 
     - name: Push Docker image
-      run: |
-        chmod +x ./push_cloud_image.sh
-        ./push_cloud_image.sh
+      run: ./scripts/push_gcloud_image.sh
 
     - name: Deploy new revision to Cloud Run
       run: |
