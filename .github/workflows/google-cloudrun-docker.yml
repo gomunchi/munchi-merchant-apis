@@ -1,11 +1,9 @@
-name: Munchi Merchant Api Dev Build and Push
+name: Build and Deploy to Google Cloud
+
 on:
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Automation deployment for Munchi Merchant Api Dev'
-        required: false
-        default: 'Manual trigger'
+  push:
+    branches: [ development ]  # Trigger the workflow on push to main branch
+
 env:
   REGISTRY: ${{ secrets.GCP_REGISTRY }}
   REPOSITORY: ${{ secrets.GCP_REPOSITORY }}
@@ -13,52 +11,37 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   IMAGE_NAME: munchi-merchant-api
   SERVICE_NAME: munchi-merchant-dev-api  # If this is different from the image name
-  REGION: ${{ secrets.GCP_REGION }}
+  REGION: europe-north1  # Assuming this is your region, adjust if necessary
+
 jobs:
-  build-push-deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3 
+      uses: actions/checkout@v2
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v0.2.0
       with:
-        fetch-depth: 0  # Fetch all history for all branches and tags
-    - name: Set up Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '20.x'
-    - name: Cache node modules
-      uses: actions/cache@v3
-      env:
-        cache-name: cache-node-modules
-      with:
-        path: ~/.npm
-        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-build-${{ env.cache-name }}-
-          ${{ runner.os }}-build-
-          ${{ runner.os }}-
-    - name: Install dependencies
+        project_id: ${{ env.PROJECT_ID }}
+        service_account_key: ${{ env.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Configure Docker
       run: |
-        npm install -g npm@8.19.4
-        npm install
-    - name: Set up Google Cloud SDK
-      uses: 'google-github-actions/auth@v1'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
-    - name: Authenticate to Google Cloud
+        gcloud auth configure-docker ${{ env.REGISTRY }}
+
+    - name: Build Docker image
       run: |
-       echo '${{ env.GCP_SA_KEY }}' > gcloud-service-key.json
-       gcloud auth activate-service-account --key-file=gcloud-service-key.json
-    - name: Configure Docker for Artifact Registry
-      run: gcloud auth configure-docker ${{ env.REGISTRY }}
-    - name: Build and push Docker image
+        chmod +x ./build_cloud_image
+        ./build_cloud_image
+
+    - name: Push Docker image
       run: |
-        git config --global user.email "github-actions@github.com"
-        git config --global user.name "GitHub Actions"
-        chmod +x ./scripts/build_gcloud_image
-        chmod +x ./scripts/push_gcloud_image
-        ./scripts/build_gcloud_image
-        ./scripts/push_gcloud_image
+        chmod +x ./push_cloud_image.sh
+        ./push_cloud_image.sh
+
     - name: Deploy new revision to Cloud Run
       run: |
         FULL_IMAGE_NAME="${REGISTRY}/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:latest"
@@ -68,5 +51,6 @@ jobs:
           --platform managed \
           --region "${REGION}" \
           --project "${PROJECT_ID}"
+
     - name: Print completion message
       run: echo "Build and push completed for ${{ env.IMAGE_NAME }}"
