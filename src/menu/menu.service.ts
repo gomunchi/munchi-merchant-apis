@@ -38,7 +38,6 @@ export class MenuService {
     private utilService: UtilsService,
   ) {}
   async getMenuCategory(orderingUserId: number, publicBusinessId: string) {
-    console.log('IS this running');
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
@@ -71,9 +70,6 @@ export class MenuService {
       categories: result,
     };
 
-    //Sync order to Wolt
-    await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
-
     return woltMenuData;
   }
 
@@ -100,108 +96,6 @@ export class MenuService {
       orderingUserId,
       woltVenue[0].providerId,
     );
-
-    // if (woltMenuData.status === 'READY') {
-    //   const { options } = woltMenuData.menu;
-    //   const orderingCategoryData = this.woltMenuMapperService.mapToOrderingCategory(woltMenuData);
-
-    //   // Create product extras
-    //   const extras = await this.orderingService.createProductsExtraField(
-    //     orderingAccessToken,
-    //     orderingBusinessId,
-    //   );
-
-    //   const newExtraId = typeof extras.id === 'number' ? extras.id.toString() : extras.id;
-
-    //   const extrasParentObj = {
-    //     id: newExtraId,
-    //     options: [],
-    //   };
-
-    //   // Create option extras
-    //   options.map(async (option) => {
-    //     extrasParentObj.options.push(option);
-    //     const formattedOption = this.woltMenuMapperService.mapToOrderingOption(option);
-    //     const newOption = await this.orderingService.createProductOptions(
-    //       orderingAccessToken,
-    //       orderingBusinessId,
-    //       newExtraId,
-    //       formattedOption,
-    //     );
-    //     const newOptionId =
-    //       typeof newOption.id === 'number' ? newOption.id.toString() : newOption.id;
-
-    //     // Create suboption extras
-    //     formattedOption.values.map(async (value) => {
-    //       await this.orderingService.createProductOptionsSuboptions(
-    //         orderingAccessToken,
-    //         orderingBusinessId,
-    //         newExtraId,
-    //         newOptionId,
-    //         value,
-    //       );
-    //     });
-    //   });
-
-    //   // Create category
-    //   orderingCategoryData.map(async (category: any) => {
-    //     const newCategory = await this.orderingService.createCategory(
-    //       orderingAccessToken,
-    //       orderingBusinessId,
-    //       category,
-    //     );
-
-    //     const newCategoryId =
-    //       typeof newCategory.id === 'number' ? newCategory.id.toString() : newCategory.id;
-
-    //     // Create products
-    //     category.products.map(async (product: any) => {
-    //       // Create product
-    //       const newProduct = await this.orderingService.createProducts(
-    //         orderingAccessToken,
-    //         orderingBusinessId,
-    //         newCategory.id,
-    //         product,
-    //       );
-    //       // Format product id
-    //       const newProductId =
-    //         typeof newProduct.id === 'number' ? newProduct.id.toString() : newProduct.id;
-
-    //       if (product.options.length === 0 || product.option_bindings.length === 0) {
-    //         return;
-    //       }
-
-    //       let hasMatch = false;
-
-    //       for (const productOption of product.options) {
-    //         const hasMatchingOption: boolean = extrasParentObj.options.some(
-    //           (extrasOption: any) => extrasOption.id === productOption.id,
-    //         );
-
-    //         if (hasMatchingOption) {
-    //           hasMatch = true;
-    //           break;
-    //         }
-    //       }
-    //       if (hasMatch) {
-    //         // Edit product (add extras to product)
-    //         await this.orderingService.editProduct(
-    //           orderingAccessToken,
-    //           orderingBusinessId,
-    //           newCategoryId,
-    //           newProductId,
-    //           {
-    //             extras: `[${extrasParentObj.id}]`,
-    //           },
-    //         );
-    //       }
-
-    //       return;
-    //     });
-    //   });
-
-    //   return orderingCategoryData;
-    // }
 
     return woltMenuData;
   }

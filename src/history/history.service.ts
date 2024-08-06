@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Business, BusinessProviders, Prisma, Provider } from '@prisma/client';
+import { Business, Prisma } from '@prisma/client';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from 'src/business/business.service';
 import { FinancialAnalyticsService } from 'src/financial-analytics/financial-analytics.service';
@@ -7,11 +7,10 @@ import { OrderResponse, OrderStatusEnum, PayMethodEnum } from 'src/order/dto/ord
 import { OrderService } from 'src/order/order.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 
-import { mapToDate } from './utils/getTimeRange';
+import { OrderingPaymentEnum } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderPrismaSelectArgs } from 'src/provider/wolt/dto/wolt-order.dto';
 import { HistoryFilterQuery, HistoryQuery } from './dto/history,dto';
-import { OrderingPaymentEnum } from 'src/provider/ordering/dto/ordering-order.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { mapToDate } from './utils/getTimeRange';
 
 @Injectable()
 export class HistoryService {

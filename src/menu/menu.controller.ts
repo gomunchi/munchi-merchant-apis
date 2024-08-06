@@ -11,6 +11,7 @@ import {
   UseGuards,
   ValidationPipe,
 } from '@nestjs/common';
+import { ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import {
@@ -43,6 +44,7 @@ export class MenuController {
   }
 
   @UseGuards(JwtGuard)
+  @ApiOperation({ deprecated: true })
   @Get('category/wolt')
   getWoltMenuCategory(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
     const { orderingUserId } = request.user;
@@ -92,7 +94,6 @@ export class MenuController {
     @Req() request: any,
     @Body(new ValidationPipe()) bodyData: ValidatedCategoryBody,
   ) {
-    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
     const { orderingUserId } = request.user;
 
     return this.menuService.editBusinessCategory(orderingUserId, bodyData);
@@ -101,7 +102,6 @@ export class MenuController {
   @UseGuards(JwtGuard)
   @Patch('products')
   businessProduct(@Req() request: any, @Body(new ValidationPipe()) bodyData: ValidatedProductBody) {
-    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
     const { orderingUserId } = request.user;
 
     return this.menuService.editBusinessProduct(orderingUserId, bodyData);
@@ -113,7 +113,6 @@ export class MenuController {
     @Req() request: any,
     @Body(new ValidationPipe()) bodyData: ValidatedSuboptionBody,
   ) {
-    console.log('🚀 ~ MenuController ~ bodyData:', bodyData);
     const { orderingUserId } = request.user;
 
     return this.menuService.editBusinessSuboption(orderingUserId, bodyData);
