@@ -21,11 +21,7 @@ import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import {
-  OrderResponse,
-  OrderResponsePreOrderStatusEnum,
-  OrderStatusEnum,
-} from 'src/order/dto/order.dto';
+import { OrderResponse } from 'src/order/dto/order.dto';
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { UtilsService } from 'src/utils/utils.service';
@@ -188,12 +184,12 @@ export class WebhookService implements OnModuleInit {
     // Sync order again
     await this.woltService.syncWoltOrder(woltCredentials.value, woltWebhookdata.order.id);
 
-    if (
-      formattedWoltOrder.preorder.status === OrderResponsePreOrderStatusEnum.Confirm &&
-      formattedWoltOrder.status === OrderStatusEnum.IN_PROGRESS
-    ) {
-      this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
-    }
+    // if (
+    //   formattedWoltOrder.type === WoltOrderType.PreOrder &&
+    //   woltWebhookdata.order.status === 'PRODUCTION'
+    // ) {
+    //   this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
+    // }
 
     //Log the last order
     if (woltWebhookdata.order.status === 'DELIVERED') {
