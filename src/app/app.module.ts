@@ -20,6 +20,8 @@ import { AppService } from './app.service';
 import { HistoryModule } from 'src/history/history.module';
 import { MenuModule } from 'src/menu/menu.module';
 import { ErrorHandlingModule } from 'src/error-handling/error-handling.module';
+import { SocketModule } from 'src/socket/socket.module';
+import { QueueModule } from 'src/queue/queue.module';
 
 @Module({
   imports: [
@@ -39,14 +41,16 @@ import { ErrorHandlingModule } from 'src/error-handling/error-handling.module';
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot(),
     ErrorHandlingModule,
-    MenuModule,
+    QueueModule,
     CmsModule,
     BusinessModule,
+    MenuModule,
     ProviderModule,
     PrismaModule,
     OrderModule,
     UserModule,
     WebhookModule,
+    SocketModule,
     AuthModule,
     ReportModule,
     HistoryModule,

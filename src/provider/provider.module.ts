@@ -11,6 +11,7 @@ import { WoltSyncService } from './wolt/wolt-sync';
 import { WoltService } from './wolt/wolt.service';
 import { OrderingMenuMapperService } from './ordering/ordering-menu-mapper';
 import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
+import { WoltWebhookService } from './wolt/wolt-webhook';
 
 @Module({
   providers: [
@@ -27,6 +28,7 @@ import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
     WoltRepositoryService,
     WoltMenuMapperService,
     WoltSyncService,
+    WoltWebhookService,
     {
       provide: `${ProviderEnum.Munchi}Service`,
       useClass: OrderingService,
@@ -47,6 +49,7 @@ import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
     WoltMenuMapperService,
     WoltRepositoryService,
     WoltSyncService,
+    WoltWebhookService,
   ],
 })
 export class ProviderModule {}

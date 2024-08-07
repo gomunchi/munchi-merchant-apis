@@ -1,10 +1,10 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { QueueService } from './queue.service';
 import { BusinessModule } from 'src/business/business.module';
-import { WebhookModule } from 'src/webhook/webhook.module';
+import { SocketModule } from 'src/socket/socket.module';
+import { QueueService } from './queue.service';
 
 @Module({
-  imports: [forwardRef(() => BusinessModule), forwardRef(() => WebhookModule)],
+  imports: [forwardRef(() => BusinessModule), SocketModule],
   providers: [QueueService],
   exports: [QueueService],
 })

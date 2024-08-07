@@ -1,13 +1,12 @@
-import { WebhookService } from './../webhook/webhook.service';
 // notification/notification.service.ts
 
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
-import { OneSignalService } from 'src/onesignal/onesignal.service';
-import { BusinessService } from 'src/business/business.service';
 import moment from 'moment-timezone';
 import { SessionService } from 'src/auth/session.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { BusinessService } from 'src/business/business.service';
+import { OneSignalService } from 'src/onesignal/onesignal.service';
 
 @Injectable()
 export class NotificationService {
@@ -16,11 +15,11 @@ export class NotificationService {
   constructor(
     private readonly onesignal: OneSignalService,
     private readonly sessionService: SessionService,
-    private readonly prismaService: PrismaService,
+
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
-    @Inject(forwardRef(() => WebhookService)) private webhookService: WebhookService,
   ) {}
 
+  @OnEvent('newOrder.notification')
   async sendNewOrderNotification(orderingBusinessId: string) {
     const business = await this.businessService.findBusinessByOrderingId(orderingBusinessId, {
       include: {
