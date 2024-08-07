@@ -14,18 +14,18 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { UserService } from 'src/user/user.service';
 import { UtilsService } from 'src/utils/utils.service';
-import { QueueService } from './../queue/queue.service';
 import { BusinessDto } from './dto/business.dto';
 
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { ApiKeyService } from 'src/auth/apiKey.service';
 import { SessionService } from 'src/auth/session.service';
 import { OrderingBusiness } from 'src/provider/ordering/ordering.type';
 import { AvailableProvider, ProviderEnum } from 'src/provider/provider.type';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { BusinessInfoSelectBase } from './business.type';
 import { ProviderDto } from './validation';
-import { ApiKeyService } from 'src/auth/apiKey.service';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class BusinessService {
@@ -38,7 +38,7 @@ export class BusinessService {
     private readonly userService: UserService,
     private readonly configService: ConfigService,
     private woltService: WoltService,
-    @Inject(forwardRef(() => QueueService)) private queueService: QueueService,
+    private eventEmitter: EventEmitter2,
     @Inject(forwardRef(() => OrderingService)) private orderingService: OrderingService,
   ) {}
 
@@ -263,14 +263,14 @@ export class BusinessService {
 
       scheduleOpenTime = moment.utc().add(duration, 'minutes').toDate();
 
-      this.queueService.upsertActiveStatusQueue({
-        provider: provider,
+      this.eventEmitter.emit('upsert_active_status_queue', {
+        provider,
         businessPublicId,
         userPublicId,
         time: scheduleOpenTime,
       });
     } else {
-      this.queueService.removeActiveStatusQueue(businessPublicId);
+      this.eventEmitter.emit('remove_active_status_queue', businessPublicId);
     }
 
     if (provider === ProviderEnum.Munchi) {
