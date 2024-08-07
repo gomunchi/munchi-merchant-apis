@@ -12,13 +12,15 @@ import { SocketService } from 'src/socket/socket.service';
 @Injectable()
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
-
+  private readonly delayProviderTime: number;
   constructor(
     private readonly prismaService: PrismaService,
     private readonly socketService: SocketService,
     private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
-  ) {}
+  ) {
+    this.delayProviderTime = 3; //Minutes
+  }
 
   @OnEvent('upsert_active_status_queue')
   async upsertActiveStatusQueue(
@@ -156,8 +158,11 @@ export class QueueService {
 
       if (timeDiff === 0) {
         this.logger.log(`Time to send reminder for order ${queue.orderNumber}`);
-        await this.socketService.remindPreOrder(queue);
-        await this.validatePreorderQueue(queue.providerOrderId);
+        const result = await this.socketService.remindPreOrder(queue);
+
+        if (result) {
+          await this.validatePreorderQueue(queue.providerOrderId);
+        }
       }
     } catch (error) {
       this.errorHandlingService.handleError(error, 'processQueueItem');
@@ -173,6 +178,31 @@ export class QueueService {
       if (queue) {
         await this.prismaService.preorderQueue.delete({
           where: { orderId: queue.orderId },
+        });
+        this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
+    }
+  }
+
+  @OnEvent('preorderQueue.update')
+  async updatePreorderQueue(orderId: string) {
+    try {
+      const queue = await this.prismaService.preorderQueue.findUnique({
+        where: { providerOrderId: orderId },
+      });
+      if (queue) {
+        const newReminderTime = moment(queue.reminderTime)
+          .add(this.delayProviderTime, 'minutes')
+          .local()
+          .toISOString(true);
+
+        await this.prismaService.preorderQueue.update({
+          where: { orderId: queue.orderId },
+          data: {
+            reminderTime: newReminderTime,
+          },
         });
         this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
       }

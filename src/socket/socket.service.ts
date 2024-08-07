@@ -10,6 +10,7 @@ import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { AcknowledgementType, BaseAcknowledgement, EmitOptions } from './dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @WebSocketGateway({
   cors: {
@@ -31,6 +32,7 @@ export class SocketService implements OnModuleInit {
     private readonly orderingService: OrderingService,
     private readonly woltRepositoryService: WoltRepositoryService,
     private readonly errorHandlingService: ErrorHandlingService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
   onModuleInit() {
     if (!this.server) {
@@ -195,7 +197,7 @@ export class SocketService implements OnModuleInit {
     this.server.to(business.orderingBusinessId).emit('business_status_change', message);
   }
 
-  async remindPreOrder({ businessPublicId, orderId, provider }: PreorderQueue): Promise<void> {
+  async remindPreOrder({ businessPublicId, orderId, provider }: PreorderQueue): Promise<boolean> {
     const business = await this.businessService.findBusinessByPublicId(businessPublicId);
     const orderingApiKey = await this.orderingService.getOrderingApiKey();
     const order = await this.getOrder(provider as ProviderEnum, orderId, orderingApiKey);
@@ -209,10 +211,13 @@ export class SocketService implements OnModuleInit {
 
     if (ackResult.received) {
       this.logger.log(`Preorder reminder acknowledged: ${ackResult.message}`);
+      return true;
     } else {
+      this.eventEmitter.emit('preorderQueue.update', order.orderId);
       this.logger.warn(
         `No acknowledgement received for preorder reminder of order ${order.orderNumber}`,
       );
+      return true;
     }
   }
 
