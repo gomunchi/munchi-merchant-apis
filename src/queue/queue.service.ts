@@ -1,13 +1,13 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
 import { ActiveStatusQueue, PreorderQueue, Prisma } from '@prisma/client';
 import moment from 'moment';
 import { BusinessService } from 'src/business/business.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { WebhookService } from './../webhook/webhook.service';
-import { AvailableProvider } from 'src/provider/provider.type';
-import { OnEvent } from '@nestjs/event-emitter';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { AvailableProvider } from 'src/provider/provider.type';
+import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
 export class QueueService {
@@ -15,11 +15,12 @@ export class QueueService {
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly webhookService: WebhookService,
+    private readonly socketService: SocketService,
     private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
   ) {}
 
+  @OnEvent('upsert_active_status_queue')
   async upsertActiveStatusQueue(
     data: Prisma.ActiveStatusQueueCreateInput,
   ): Promise<ActiveStatusQueue> {
@@ -32,6 +33,7 @@ export class QueueService {
     });
   }
 
+  @OnEvent('remove_active_status_queue')
   async removeActiveStatusQueue(businessPublicId: string) {
     return this.prismaService.activeStatusQueue.deleteMany({
       where: {
@@ -84,7 +86,7 @@ export class QueueService {
         businessPublicId,
         true,
       );
-      this.webhookService.notifyCheckBusinessStatus(businessPublicId);
+      this.socketService.notifyCheckBusinessStatus(businessPublicId);
     }
   }
 
@@ -154,7 +156,7 @@ export class QueueService {
 
       if (timeDiff === 0) {
         this.logger.log(`Time to send reminder for order ${queue.orderNumber}`);
-        await this.webhookService.remindPreOrder(queue);
+        await this.socketService.remindPreOrder(queue);
         await this.validatePreorderQueue(queue.providerOrderId);
       }
     } catch (error) {
