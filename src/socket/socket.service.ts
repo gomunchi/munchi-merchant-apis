@@ -135,7 +135,6 @@ export class SocketService implements OnModuleInit {
             .to(room)
             .timeout(timeout)
             .emit(event, data, (error: any, ack: BaseAcknowledgement[]) => {
-              console.log('🚀 ~ SocketService ~ .emit ~ ack:', ack);
               if (ack.length > 0 && ack[0].received) {
                 this.logger.log(`${event} acknowledged: ${JSON.stringify(ack)}`);
                 resolve(ack[0]);
