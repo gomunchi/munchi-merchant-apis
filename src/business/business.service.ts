@@ -389,6 +389,20 @@ export class BusinessService {
     });
   }
 
+  async findBusinessByPublicIdWithPayload<P extends Prisma.BusinessArgs>(
+    publicBusinessId: string,
+    getPayload: P,
+  ) {
+    const options = {
+      where: {
+        publicId: publicBusinessId,
+      },
+      ...getPayload,
+    };
+
+    return (await this.prismaService.business.findUnique(options)) as Prisma.BusinessGetPayload<P>;
+  }
+
   async findBusinessByOrderingId<P extends Prisma.BusinessArgs>(
     orderingBusinessId: string,
     getPayload: P,
