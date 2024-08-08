@@ -218,7 +218,7 @@ export class SocketService implements OnModuleInit {
     }
   }
 
-  private async getOrder(
+  public async getOrder(
     provider: ProviderEnum,
     orderId: number,
     orderingApiKey: any,
