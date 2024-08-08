@@ -1,12 +1,14 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
 import { ActiveStatusQueue, PreorderQueue, Prisma } from '@prisma/client';
 import moment from 'moment';
 import { BusinessService } from 'src/business/business.service';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
+import { OrderStatusEnum } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { AvailableProvider } from 'src/provider/provider.type';
+import { ProviderManagmentService } from 'src/provider/provider-management.service';
+import { AvailableProvider, ProviderEnum } from 'src/provider/provider.type';
 import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
@@ -18,6 +20,7 @@ export class QueueService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly socketService: SocketService,
+    private readonly providerManagementService: ProviderManagmentService,
     private readonly eventEmitter: EventEmitter2,
     private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
@@ -187,6 +190,9 @@ export class QueueService {
         return this.retryRemindPreOrder(queue, retryCount + 1);
       } else {
         this.eventEmitter.emit('preorder.notification', queue.businessPublicId, queue.orderNumber);
+
+        this.eventEmitter.emit('queue.updatePreorder', queue);
+
         this.logger.error(
           `Failed to send preorder reminder for order ${queue.orderNumber} after ${this.MAX_RETRIES} attempts`,
         );
@@ -195,6 +201,56 @@ export class QueueService {
     } catch (error) {
       this.errorHandlingService.handleError(error, 'retryRemindPreOrder');
       return false;
+    }
+  }
+
+  @OnEvent('queue.updatePreorder')
+  async queueUpdatePreorder(queue: PreorderQueue) {
+    const business = await this.businessService.findBusinessByPublicIdWithPayload(
+      queue.businessPublicId,
+      {
+        include: {
+          provider: {
+            include: {
+              provider: true,
+            },
+          },
+        },
+      },
+    );
+
+    const formattedProvider = [
+      ...business.provider.map((providerObject) => ({ ...providerObject.provider })),
+    ];
+
+    const formatBusiness = {
+      ...business,
+      id: business.publicId,
+      provider: formattedProvider,
+    };
+
+    try {
+      const order = await this.socketService.getOrder(
+        queue.provider as ProviderEnum,
+        queue.orderId,
+        null,
+      );
+      if (!order) {
+        return;
+      }
+
+      await this.providerManagementService.updateOrder(
+        queue.provider as ProviderEnum,
+        0,
+        queue.id.toString(),
+        {
+          orderStatus: OrderStatusEnum.IN_PROGRESS,
+          preparedIn: order.preparedIn ?? 20,
+        },
+        [formatBusiness],
+      );
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
     }
   }
 
