@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
 import { ActiveStatusQueue, PreorderQueue, Prisma } from '@prisma/client';
 import moment from 'moment';
@@ -13,9 +13,12 @@ import { SocketService } from 'src/socket/socket.service';
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
   private readonly delayProviderTime: number;
+  private readonly MAX_RETRIES = 3;
+  private readonly RETRY_DELAY = 5000; // 5 seconds
   constructor(
     private readonly prismaService: PrismaService,
     private readonly socketService: SocketService,
+    private readonly eventEmitter: EventEmitter2,
     private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
   ) {
@@ -158,7 +161,7 @@ export class QueueService {
 
       if (timeDiff === 0) {
         this.logger.log(`Time to send reminder for order ${queue.orderNumber}`);
-        const result = await this.socketService.remindPreOrder(queue);
+        const result = await this.retryRemindPreOrder(queue);
 
         if (result) {
           await this.validatePreorderQueue(queue.providerOrderId);
@@ -166,6 +169,32 @@ export class QueueService {
       }
     } catch (error) {
       this.errorHandlingService.handleError(error, 'processQueueItem');
+    }
+  }
+
+  private async retryRemindPreOrder(queue: PreorderQueue, retryCount = 0): Promise<boolean> {
+    try {
+      const result = await this.socketService.remindPreOrder(queue);
+      if (result) {
+        return true;
+      }
+
+      if (retryCount < this.MAX_RETRIES) {
+        this.logger.warn(
+          `Retrying preorder reminder for order ${queue.orderNumber}. Attempt ${retryCount + 1}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, this.RETRY_DELAY));
+        return this.retryRemindPreOrder(queue, retryCount + 1);
+      } else {
+        this.eventEmitter.emit('preorder.notification', queue.businessPublicId, queue.orderNumber);
+        this.logger.error(
+          `Failed to send preorder reminder for order ${queue.orderNumber} after ${this.MAX_RETRIES} attempts`,
+        );
+        return false;
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'retryRemindPreOrder');
+      return false;
     }
   }
 
@@ -178,31 +207,6 @@ export class QueueService {
       if (queue) {
         await this.prismaService.preorderQueue.delete({
           where: { orderId: queue.orderId },
-        });
-        this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
-      }
-    } catch (error) {
-      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
-    }
-  }
-
-  @OnEvent('preorderQueue.update')
-  async updatePreorderQueue(orderId: string) {
-    try {
-      const queue = await this.prismaService.preorderQueue.findUnique({
-        where: { providerOrderId: orderId },
-      });
-      if (queue) {
-        const newReminderTime = moment(queue.reminderTime)
-          .add(this.delayProviderTime, 'minutes')
-          .local()
-          .toISOString(true);
-
-        await this.prismaService.preorderQueue.update({
-          where: { orderId: queue.orderId },
-          data: {
-            reminderTime: newReminderTime,
-          },
         });
         this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
       }
