@@ -58,6 +58,25 @@ export class OneSignalService {
     }
   }
 
+  async pushPreorderNotification(playerIds: string[], orderNumber: string) {
+    const notification = this.createNotification({
+      include_player_ids: playerIds,
+      android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
+      template_id: PushNotificationTemplate.PREORDER_REMINDER,
+      data: {
+        orderNumber: orderNumber,
+      },
+    });
+
+    try {
+      await this.client.createNotification(notification);
+    } catch (error) {
+      this.logger.error(`Error creating new order notification to: ${JSON.stringify(playerIds)}`);
+      this.logger.error(error);
+      throw error;
+    }
+  }
+
   async pushNewOrderNotification(playerIds: string[], language = 'en') {
     const notification = this.createNotification({
       include_player_ids: playerIds,
