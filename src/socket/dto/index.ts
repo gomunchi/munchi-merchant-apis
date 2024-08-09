@@ -14,7 +14,7 @@ export interface OrdersRegisterAcknowledgement {
   message: string;
 }
 
-export type AcknowledgementType = 'preorder' | 'orders_register' | 'other'; // Add more types as needed
+export type AcknowledgementType = 'preorder' | 'orders_register' | 'other' | 'order_change'; // Add more types as needed
 
 export interface BaseAcknowledgement {
   type: AcknowledgementType;

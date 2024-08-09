@@ -51,6 +51,9 @@ export class WebhookService {
         event: 'orders_register',
         data: formattedOrder,
         acknowledgementType: 'orders_register',
+        timeout: 10000, // 10 seconds
+        retries: 3,
+        retryDelay: 2000, // 2 seconds, will increase with each retry
       });
 
       if (ackResult.received) {
@@ -77,12 +80,30 @@ export class WebhookService {
     ) {
       return;
     } else {
-      if (
-        order.status === OrderingOrderStatus.AcceptedByBusiness &&
-        order.reporting_data.at.hasOwnProperty(`status:${OrderingOrderStatus.Preorder}`)
-      ) {
-        this.eventEmitter.emit('preorderQueue.validate', order.id.toString());
+      try {
+        const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+        const ackResult = await this.socketService.emitWithAcknowledgement({
+          room: order.business_id.toString(),
+          event: 'orders_register',
+          data: formattedOrder,
+          acknowledgementType: 'order_change',
+          timeout: 10000, // 10 seconds
+          retries: 3,
+          retryDelay: 2000, // 2 seconds, will increase with each retry
+        });
+
+        if (ackResult.received) {
+          this.logger.log(`Order register event acknowledged: ${ackResult.message}`);
+        } else {
+          this.logger.warn(
+            `No acknowledgement received for order ${order.id} from business ${order.business.name}`,
+          );
+        }
+      } catch (error) {
+        this.errorHandlingService.handleError(error, 'changeOrderNotification');
       }
+
+      this.eventEmitter.emit('preorderQueue.validate', order.id.toString());
 
       try {
         this.socketService.emitOrderChange(order);
