@@ -104,79 +104,96 @@ export class SocketService implements OnModuleInit {
     data,
     acknowledgementType,
     timeout = 5000,
-  }: EmitOptions): Promise<BaseAcknowledgement> {
-    return new Promise<BaseAcknowledgement>(async (resolve) => {
-      try {
-        const sockets = await this.server.in(room).fetchSockets();
-        if (sockets.length === 0) {
-          this.logger.warn(`No clients connected to room ${room}. Notification will not be sent.`);
-          return resolve(
-            this.createDefaultAcknowledgement(
-              acknowledgementType,
-              data,
-              false,
-              'No clients in room',
+    retries = 3,
+    retryDelay = 1000,
+  }: EmitOptions & { retries?: number; retryDelay?: number }): Promise<BaseAcknowledgement> {
+    let attemptCount = 0;
+
+    const emit = async (): Promise<BaseAcknowledgement> => {
+      attemptCount++;
+      this.logger.log(`Attempt ${attemptCount} to emit ${event} for order ${data.orderNumber}`);
+
+      const sockets = await this.server.in(room).fetchSockets();
+      if (sockets.length === 0) {
+        this.logger.warn(`No clients connected to room ${room}. Notification will not be sent.`);
+        return this.createDefaultAcknowledgement(
+          acknowledgementType,
+          data,
+          false,
+          'No clients in room',
+        );
+      }
+
+      return new Promise<BaseAcknowledgement>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(
+            new Error(
+              `Timeout waiting for acknowledgement of ${event} for order ${data.orderNumber}`,
             ),
           );
-        }
+        }, timeout);
 
-        const timeoutPromise = new Promise<BaseAcknowledgement>((_, reject) => {
-          setTimeout(() => {
-            reject(
-              new Error(
-                `Timeout waiting for acknowledgement of ${event} for order ${data.orderNumber}`,
+        this.server.to(room).emit(event, data, (error: any, ack: BaseAcknowledgement[]) => {
+          clearTimeout(timeoutId);
+          if (error) {
+            this.logger.error(`Error in ${event} for order ${data.orderNumber}: ${error}`);
+            reject(error);
+          } else if (ack && ack.length > 0 && ack[0].received) {
+            this.logger.log(`${event} acknowledged: ${JSON.stringify(ack)}`);
+            resolve(ack[0]);
+          } else {
+            this.logger.warn(
+              `Invalid acknowledgement received for ${event} of order ${data.orderNumber}`,
+            );
+            resolve(
+              this.createDefaultAcknowledgement(
+                acknowledgementType,
+                data,
+                false,
+                'Invalid acknowledgement',
               ),
             );
-          }, timeout);
+          }
         });
+      });
+    };
 
-        const emitPromise = new Promise<BaseAcknowledgement>((resolve) => {
-          this.server
-            .to(room)
-            .timeout(timeout)
-            .emit(event, data, (error: any, ack: BaseAcknowledgement[]) => {
-              if (ack.length > 0 && ack[0].received) {
-                this.logger.log(`${event} acknowledged: ${JSON.stringify(ack)}`);
-                resolve(ack[0]);
-              } else {
-                this.logger.warn(
-                  `Invalid acknowledgement received for ${event} of order ${data.orderNumber}`,
-                );
-                resolve(
-                  this.createDefaultAcknowledgement(
-                    acknowledgementType,
-                    data,
-                    false,
-                    'Invalid acknowledgement',
-                  ),
-                );
-              }
-            });
-        });
+    const retryWithDelay = async (delay: number): Promise<BaseAcknowledgement> => {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return emit();
+    };
 
-        const result = await Promise.race([emitPromise, timeoutPromise]);
-        resolve(result);
-      } catch (error) {
-        this.logger.error(`Error in ${event} for order ${data.orderNumber}: ${error}`);
-        resolve(this.createDefaultAcknowledgement(acknowledgementType, data, false, 'error'));
+    try {
+      let result = await emit();
+      while (!result.received && attemptCount < retries) {
+        this.logger.warn(
+          `Retrying ${event} for order ${data.orderNumber}. Attempt ${
+            attemptCount + 1
+          } of ${retries}`,
+        );
+        result = await retryWithDelay(retryDelay * attemptCount); // Exponential backoff
       }
-    });
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Final error in ${event} for order ${data.orderNumber} after ${attemptCount} attempts: ${error}`,
+      );
+      return this.createDefaultAcknowledgement(acknowledgementType, data, false, 'error');
+    }
   }
 
   private createDefaultAcknowledgement(
     type: AcknowledgementType,
     data: any,
     received: boolean,
-    reason: string,
+    message: string,
   ): BaseAcknowledgement {
     return {
       type,
       received,
       orderNumber: data.orderNumber,
-      business: data.business?.name || 'Unknown',
-      message: `${received ? 'Acknowledged' : 'Not acknowledged'}: ${reason} for ${type} of order ${
-        data.orderNumber
-      }`,
+      business: data.business?.name,
+      message,
     };
   }
 
