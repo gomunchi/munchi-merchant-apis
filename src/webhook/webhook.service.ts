@@ -1,4 +1,3 @@
-
 import { Injectable, Logger } from '@nestjs/common';
 import { BusinessService } from 'src/business/business.service';
 import { OrderingOrderMapperService } from 'src/provider/ordering/ordering-order-mapper';
@@ -138,18 +137,5 @@ export class WebhookService {
 
   async notifyCheckBusinessStatus(businessPublicId: string) {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
-  }
-  @OnEvent('zapier.trigger')
-  async sendZapierWebhook(order: OrderResponse) {
-    try {
-      const result = await this.zapierService.sendWebhook(order);
-
-      this.logger.log(`Zapier webhook sent successfully for order: ${order.id}`);
-
-      return result;
-    } catch (error) {
-      this.logger.error(`error sendingZapierhook: ${JSON.stringify(error)}`);
-      throw new BadRequestException(error);
-    }
   }
 }

@@ -27,21 +27,17 @@ import { WoltOrderPrismaSelectArgs, WoltOrderType } from './dto/wolt-order.dto';
 
 import { WoltCategory as WoltMenuCategory } from './dto/wolt-menu.dto';
 
-import {
-  OrderingCategoryProductExtra,
-  OrderingMenuCategory,
-} from '../ordering/dto/ordering-menu.dto';
 import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { WoltMenuData } from './dto/wolt-menu.dto';
 import { WoltOrderMapperService } from './wolt-order-mapper';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltSyncService } from './wolt-sync';
-import { WoltMenuData } from './dto/wolt-menu.dto';
+
 import {
   OrderingCategoryProductExtra,
   OrderingMenuCategory,
 } from '../ordering/dto/ordering-menu.dto';
-import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
+
 import { MenuItemBodyData } from './wolt.type';
 
 @Injectable()
