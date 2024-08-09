@@ -866,7 +866,7 @@ export class OrderingService implements ProviderService {
 
     await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
   }
- 
+
   public async getOrderingApiKey() {
     try {
       return await this.prismaService.apiKey.findFirst({
