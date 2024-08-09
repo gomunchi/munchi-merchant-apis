@@ -1,23 +1,34 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
-import { ActiveStatusQueue, Prisma } from '@prisma/client';
+import { ActiveStatusQueue, PreorderQueue, Prisma } from '@prisma/client';
 import moment from 'moment';
 import { BusinessService } from 'src/business/business.service';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
+import { OrderStatusEnum } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { WebhookService } from './../webhook/webhook.service';
-import { AvailableProvider } from 'src/provider/provider.type';
-import { OnEvent } from '@nestjs/event-emitter';
+import { ProviderManagmentService } from 'src/provider/provider-management.service';
+import { AvailableProvider, ProviderEnum } from 'src/provider/provider.type';
+import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
 export class QueueService {
   private readonly logger = new Logger(QueueService.name);
-
+  private readonly delayProviderTime: number;
+  private readonly MAX_RETRIES = 3;
+  private readonly RETRY_DELAY = 5000; // 5 seconds
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly webhookService: WebhookService,
+    private readonly socketService: SocketService,
+    private readonly providerManagementService: ProviderManagmentService,
+    private readonly eventEmitter: EventEmitter2,
+    private errorHandlingService: ErrorHandlingService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
-  ) {}
+  ) {
+    this.delayProviderTime = 3; //Minutes
+  }
 
+  @OnEvent('upsert_active_status_queue')
   async upsertActiveStatusQueue(
     data: Prisma.ActiveStatusQueueCreateInput,
   ): Promise<ActiveStatusQueue> {
@@ -30,6 +41,7 @@ export class QueueService {
     });
   }
 
+  @OnEvent('remove_active_status_queue')
   async removeActiveStatusQueue(businessPublicId: string) {
     return this.prismaService.activeStatusQueue.deleteMany({
       where: {
@@ -82,7 +94,7 @@ export class QueueService {
         businessPublicId,
         true,
       );
-      this.webhookService.notifyCheckBusinessStatus(businessPublicId);
+      this.socketService.notifyCheckBusinessStatus(businessPublicId);
     }
   }
 
@@ -124,47 +136,138 @@ export class QueueService {
 
   @Interval(60000)
   async processingPreorderReminder() {
-    const processingQueue = await this.prismaService.preorderQueue.findMany({
-      where: {
-        processing: true,
-      },
-    });
-    this.logger.warn(`Processing queue preorder: ${processingQueue.length}`);
+    try {
+      const processingQueue = await this.prismaService.preorderQueue.findMany({
+        where: { processing: true },
+      });
+      this.logger.log(`Processing queue preorder: ${processingQueue.length}`);
 
-    if (processingQueue.length === 0) {
-      this.logger.warn('No processed preorders');
-      return;
+      if (processingQueue.length === 0) {
+        this.logger.log('No processed preorders');
+        return;
+      }
+
+      for (const queue of processingQueue) {
+        await this.processQueueItem(queue);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'processingPreorderReminder');
     }
+  }
 
-    for (const queue of processingQueue) {
+  private async processQueueItem(queue: PreorderQueue) {
+    try {
       const timeDiff = moment(queue.reminderTime).local().diff(moment(), 'minutes');
-      this.logger.warn(
+      this.logger.log(
         `${timeDiff} minutes left to remind order ${queue.orderNumber} at ${queue.reminderTime}`,
       );
 
-      if (timeDiff == 0) {
-        this.logger.warn(`Time to send reminder for order ${queue.orderNumber}`);
-        await this.webhookService.remindPreOrder(queue);
-        await this.validatePreorderQueue(queue.providerOrderId);
+      if (timeDiff === 0) {
+        this.logger.log(`Time to send reminder for order ${queue.orderNumber}`);
+        const result = await this.retryRemindPreOrder(queue);
+
+        if (result) {
+          await this.validatePreorderQueue(queue.providerOrderId);
+        }
       }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'processQueueItem');
+    }
+  }
+
+  private async retryRemindPreOrder(queue: PreorderQueue, retryCount = 0): Promise<boolean> {
+    try {
+      const result = await this.socketService.remindPreOrder(queue);
+      if (result) {
+        return true;
+      }
+
+      if (retryCount < this.MAX_RETRIES) {
+        this.logger.warn(
+          `Retrying preorder reminder for order ${queue.orderNumber}. Attempt ${retryCount + 1}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, this.RETRY_DELAY));
+        return this.retryRemindPreOrder(queue, retryCount + 1);
+      } else {
+        this.eventEmitter.emit('preorder.notification', queue.businessPublicId, queue.orderNumber);
+
+        this.eventEmitter.emit('queue.updatePreorder', queue);
+
+        this.logger.error(
+          `Failed to send preorder reminder for order ${queue.orderNumber} after ${this.MAX_RETRIES} attempts`,
+        );
+        return false;
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'retryRemindPreOrder');
+      return false;
+    }
+  }
+
+  @OnEvent('queue.updatePreorder')
+  async queueUpdatePreorder(queue: PreorderQueue) {
+    const business = await this.businessService.findBusinessByPublicIdWithPayload(
+      queue.businessPublicId,
+      {
+        include: {
+          provider: {
+            include: {
+              provider: true,
+            },
+          },
+        },
+      },
+    );
+
+    const formattedProvider = [
+      ...business.provider.map((providerObject) => ({ ...providerObject.provider })),
+    ];
+
+    const formatBusiness = {
+      ...business,
+      id: business.publicId,
+      provider: formattedProvider,
+    };
+
+    try {
+      const order = await this.socketService.getOrder(
+        queue.provider as ProviderEnum,
+        queue.orderId,
+        null,
+      );
+      if (!order) {
+        return;
+      }
+
+      await this.providerManagementService.updateOrder(
+        queue.provider as ProviderEnum,
+        0,
+        queue.id.toString(),
+        {
+          orderStatus: OrderStatusEnum.IN_PROGRESS,
+          preparedIn: order.preparedIn ?? 20,
+        },
+        [formatBusiness],
+      );
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
     }
   }
 
   @OnEvent('preorderQueue.validate')
   async validatePreorderQueue(orderId: string) {
-    const queue = await this.prismaService.preorderQueue.findUnique({
-      where: {
-        providerOrderId: orderId,
-      },
-    });
-    if (queue) {
-      await this.prismaService.preorderQueue.delete({
-        where: {
-          orderId: queue.orderId,
-        },
+    try {
+      const queue = await this.prismaService.preorderQueue.findUnique({
+        where: { providerOrderId: orderId },
       });
+      if (queue) {
+        await this.prismaService.preorderQueue.delete({
+          where: { orderId: queue.orderId },
+        });
+        this.logger.log(`Preorder queue validated and deleted for order ${orderId}`);
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'validatePreorderQueue');
     }
-
-    return;
   }
 }

@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
-  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, Credential, Provider } from '@prisma/client';
+import { Prisma, Provider } from '@prisma/client';
 import axios from 'axios';
 import moment from 'moment';
 import {
@@ -22,15 +23,16 @@ import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { ProviderService } from '../provider.service';
 import { ProviderEnum } from '../provider.type';
 import { WoltOrderV2 } from './dto/wolt-order-v2.dto';
-import {
-  WoltCategory,
-  WoltOrder,
-  WoltOrderPrismaSelectArgs,
-  WoltOrderType,
-} from './dto/wolt-order.dto';
+import { WoltOrderPrismaSelectArgs, WoltOrderType } from './dto/wolt-order.dto';
 
 import { WoltCategory as WoltMenuCategory } from './dto/wolt-menu.dto';
 
+import {
+  OrderingCategoryProductExtra,
+  OrderingMenuCategory,
+} from '../ordering/dto/ordering-menu.dto';
+import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
+import { WoltMenuData } from './dto/wolt-menu.dto';
 import { WoltOrderMapperService } from './wolt-order-mapper';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltSyncService } from './wolt-sync';
@@ -136,7 +138,7 @@ export class WoltService implements ProviderService {
 
       return response.data;
     } catch (error) {
-      this.utilsService.logError(error);
+      this.handleWoltError(error);
     }
   }
 
@@ -679,12 +681,25 @@ export class WoltService implements ProviderService {
 
   async handleWoltError(error: any) {
     if (error.response) {
-      this.logger.error(error.response.data);
+      this.logger.error('Wolt API Error:', error.response.data);
 
-      throw new ForbiddenException(error.response.data, error.response.status);
+      throw new HttpException(
+        {
+          message: 'Error from Wolt API',
+          status: error.response.status,
+          details: error.response.data,
+        },
+        error.response.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
 
-    this.logger.error(error);
-    throw new ForbiddenException(error);
+    this.logger.error('Unexpected Wolt Error:', error);
+    throw new HttpException(
+      {
+        message: 'Unexpected error when communicating with Wolt',
+        details: error.message,
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
 }

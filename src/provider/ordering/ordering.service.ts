@@ -5,6 +5,7 @@ import { Business as BusinessPrisma, BusinessProviders, Provider } from '@prisma
 import axios from 'axios';
 import { plainToInstance } from 'class-transformer';
 import { Business } from 'ordering-api-sdk';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthCredentials, OrderData } from 'src/type';
@@ -32,6 +33,7 @@ export class OrderingService implements ProviderService {
     private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly orderingSyncService: OrderingSyncService,
     private readonly woltService: WoltService,
+    private readonly errorHandlingService: ErrorHandlingService,
     private eventEmitter: EventEmitter2,
   ) {
     this.woltApiUrl = this.configService.get('WOLT_API_URL');
@@ -328,15 +330,11 @@ export class OrderingService implements ProviderService {
     try {
       const response = await axios.request(options);
 
-      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
-        response.data.result,
-      );
-
       if (orderData.orderStatus === OrderStatusEnum.PREORDER) {
-        this.eventEmitter.emit('zapier.trigger', formattedOrder);
+        this.eventEmitter.emit('zapier.trigger', response.data.result);
       }
 
-      return formattedOrder;
+      return response.data.result;
     } catch (error) {
       this.utilService.logError(error);
     }
@@ -867,5 +865,16 @@ export class OrderingService implements ProviderService {
     };
 
     await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
+  }
+ 
+  public async getOrderingApiKey() {
+    try {
+      return await this.prismaService.apiKey.findFirst({
+        where: { name: 'ORDERING_API_KEY' },
+      });
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'getOrderingApiKey');
+      throw error; // Re-throw as this is critical for further operations
+    }
   }
 }
