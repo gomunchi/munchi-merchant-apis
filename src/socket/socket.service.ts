@@ -125,36 +125,32 @@ export class SocketService implements OnModuleInit {
       }
 
       return new Promise<BaseAcknowledgement>((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          reject(
-            new Error(
-              `Timeout waiting for acknowledgement of ${event} for order ${data.orderNumber}`,
-            ),
-          );
-        }, timeout);
-
-        this.server.to(room).emit(event, data, (error: any, ack: BaseAcknowledgement[]) => {
-          clearTimeout(timeoutId);
-          if (error) {
-            this.logger.error(`Error in ${event} for order ${data.orderNumber}: ${error}`);
-            reject(error);
-          } else if (ack && ack.length > 0 && ack[0].received) {
-            this.logger.log(`${event} acknowledged: ${JSON.stringify(ack)}`);
-            resolve(ack[0]);
-          } else {
-            this.logger.warn(
-              `Invalid acknowledgement received for ${event} of order ${data.orderNumber}`,
-            );
-            resolve(
-              this.createDefaultAcknowledgement(
-                acknowledgementType,
-                data,
-                false,
-                'Invalid acknowledgement',
-              ),
-            );
-          }
-        });
+        this.server
+          .timeout(timeout)
+          .to(room)
+          .emit(event, data, (err: Error, ack: BaseAcknowledgement[]) => {
+            if (err) {
+              this.logger.error(
+                `Timeout error in ${event} for order ${data.orderNumber}: ${err.message}`,
+              );
+              reject(err);
+            } else if (ack && ack.length > 0 && ack[0].received) {
+              this.logger.log(`${event} acknowledged: ${JSON.stringify(ack)}`);
+              resolve(ack[0]);
+            } else {
+              this.logger.warn(
+                `Invalid acknowledgement received for ${event} of order ${data.orderNumber}`,
+              );
+              resolve(
+                this.createDefaultAcknowledgement(
+                  acknowledgementType,
+                  data,
+                  false,
+                  'Invalid acknowledgement',
+                ),
+              );
+            }
+          });
       });
     };
 
