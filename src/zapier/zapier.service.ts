@@ -11,6 +11,7 @@ export class ZapierService {
   constructor(private configService: ConfigService) {
     this.zapierUrl = this.configService.get('ZAPIER_URL');
   }
+
   @OnEvent('zapier.trigger')
   async sendZapierWebhook(order: OrderingOrder) {
     try {

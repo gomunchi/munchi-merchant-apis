@@ -36,6 +36,13 @@ import { WoltMenuData } from './dto/wolt-menu.dto';
 import { WoltOrderMapperService } from './wolt-order-mapper';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltSyncService } from './wolt-sync';
+import { WoltMenuData } from './dto/wolt-menu.dto';
+import {
+  OrderingCategoryProductExtra,
+  OrderingMenuCategory,
+} from '../ordering/dto/ordering-menu.dto';
+import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
+import { MenuItemBodyData } from './wolt.type';
 
 @Injectable()
 export class WoltService implements ProviderService {
