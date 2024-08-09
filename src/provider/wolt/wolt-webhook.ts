@@ -45,6 +45,9 @@ export class WoltWebhookService {
       event: 'orders_register',
       data: formattedWoltOrder,
       acknowledgementType: 'orders_register',
+      timeout: 10000, // 10 seconds
+      retries: 3,
+      retryDelay: 2000, // 2 seconds, will increase with each retry
     });
 
     if (ackResult.received) {
@@ -73,7 +76,10 @@ export class WoltWebhookService {
       room: business.orderingBusinessId,
       event: 'order_change',
       data: formattedWoltOrder,
-      acknowledgementType: 'other',
+      acknowledgementType: 'order_change',
+      timeout: 10000, // 10 seconds
+      retries: 3,
+      retryDelay: 2000, // 2 seconds, will increase with each retry
     });
 
     if (ackResult.received) {
