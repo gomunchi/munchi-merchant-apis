@@ -340,7 +340,13 @@ export class OrderingService implements ProviderService {
     }
   }
 
-  async rejectOrder(orderingUserId: number, orderId: string): Promise<OrderResponse> {
+  async rejectOrder(
+    orderingUserId: number,
+    orderId: string,
+    orderRejectData: {
+      reason: string;
+    },
+  ): Promise<OrderResponse> {
     const accessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
     const options = {
@@ -352,6 +358,7 @@ export class OrderingService implements ProviderService {
       },
       data: {
         status: OrderingOrderStatus.RejectedByBusiness,
+        reject_reason: orderRejectData.reason,
       },
     };
     try {
