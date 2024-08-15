@@ -358,7 +358,7 @@ export class MenuService {
 
     return woltMenuData;
   }
-
+  
   @Cron(CronExpression.EVERY_5_MINUTES)
   async processMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
@@ -393,11 +393,13 @@ export class MenuService {
       },
     });
 
+    this.logger.log(`Processing menu tracking queue : ${menuQueue.length}`);
+
     menuQueue.forEach(async (queue) => {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
       this.logger.log(`${queue.name}`);
 
-      if (calculatedTime === 0 && queue.processing) {
+      if (calculatedTime === 0) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
