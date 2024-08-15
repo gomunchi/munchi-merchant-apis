@@ -358,9 +358,9 @@ export class MenuService {
 
     return woltMenuData;
   }
-
-  @Cron(CronExpression.EVERY_5_SECONDS)
-  async onMenuTracking() {
+  
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async processMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
       take: 10,
       where: {
@@ -371,10 +371,35 @@ export class MenuService {
     });
 
     menuQueue.forEach(async (queue) => {
+      await this.prismaService.menuTracking.update({
+        where: {
+          businessPublicId: queue.businessPublicId,
+        },
+        data: {
+          processing: true,
+        },
+      });
+    });
+  }
+
+  @Cron(CronExpression.EVERY_QUARTER)
+  async onMenuTracking() {
+    const menuQueue = await this.prismaService.menuTracking.findMany({
+      take: 10,
+      where: {
+        synchronizeTime: {
+          gt: new Date().toISOString(), // Use the current date and time for comparison
+        },
+      },
+    });
+
+    this.logger.log(`Processing menu tracking queue : ${menuQueue.length}`);
+
+    menuQueue.forEach(async (queue) => {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
       this.logger.log(`${queue.name}`);
 
-      if (calculatedTime === 0 && queue.processing) {
+      if (calculatedTime === 0) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
