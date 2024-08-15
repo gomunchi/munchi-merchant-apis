@@ -358,8 +358,31 @@ export class MenuService {
 
     return woltMenuData;
   }
+  
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async processMenuTracking() {
+    const menuQueue = await this.prismaService.menuTracking.findMany({
+      take: 10,
+      where: {
+        synchronizeTime: {
+          gt: new Date().toISOString(), // Use the current date and time for comparison
+        },
+      },
+    });
 
-  @Cron(CronExpression.EVERY_MINUTE)
+    menuQueue.forEach(async (queue) => {
+      await this.prismaService.menuTracking.update({
+        where: {
+          businessPublicId: queue.businessPublicId,
+        },
+        data: {
+          processing: true,
+        },
+      });
+    });
+  }
+
+  @Cron(CronExpression.EVERY_QUARTER)
   async onMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
       take: 10,
