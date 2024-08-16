@@ -378,18 +378,7 @@ export class MenuService {
 
     return woltMenuData;
   }
-  
-  @Cron(CronExpression.EVERY_5_MINUTES)
-  async processMenuTracking() {
-    const menuQueue = await this.prismaService.menuTracking.findMany({
-      take: 10,
-      where: {
-        synchronizeTime: {
-          gt: new Date().toISOString(), // Use the current date and time for comparison
-        },
-      },
-    });
-    
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async processMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
