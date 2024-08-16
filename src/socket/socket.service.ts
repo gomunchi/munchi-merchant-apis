@@ -45,12 +45,12 @@ export class SocketService implements OnModuleInit {
   }
 
   private handleSocketConnection(socket: any) {
-    socket.on('joinRooms', async (rooms: string[], callback) => {
-      await this.handleJoinRooms(socket, rooms, callback);
+    socket.on('join', async (room: string | string[], callback?: (response: any) => void) => {
+      await this.handleJoinRooms(socket, room, callback);
     });
 
-    socket.on('leaveRooms', async (rooms: string[], callback) => {
-      await this.handleLeaveRooms(socket, rooms, callback);
+    socket.on('leave', async (room: string | string[], callback?: (response: any) => void) => {
+      await this.handleLeaveRooms(socket, room, callback);
     });
 
     socket.on('disconnect', () => {
@@ -73,15 +73,16 @@ export class SocketService implements OnModuleInit {
 
   private async handleJoinRooms(
     socket: Socket,
-    rooms: string[],
-    callback: (response: any) => void,
+    room: string | string[],
+    callback?: (response: any) => void,
   ) {
+    const rooms = Array.isArray(room) ? room : [room];
     this.logger.warn(`Attempting to join rooms: ${rooms.join(', ')}`);
     const joinedRooms: string[] = [];
     const errors: string[] = [];
 
-    for (const room of rooms) {
-      const business = await this.businessService.findBusinessByPublicId(room);
+    for (const r of rooms) {
+      const business = await this.businessService.findBusinessByPublicId(r);
       if (business) {
         const roomName = business.orderingBusinessId.toString();
         await socket.join(roomName);
@@ -91,51 +92,56 @@ export class SocketService implements OnModuleInit {
           `Socket ${socket.id} joined room ${roomName} for business ${business.name}`,
         );
       } else {
-        errors.push(`No business found for ${room}`);
-        this.logger.error(`No business found for ${room}`);
+        errors.push(`No business found for ${r}`);
+        this.logger.error(`No business found for ${r}`);
       }
     }
 
     this.updateActiveRooms();
     this.logActiveRooms();
 
-    callback({
-      success: errors.length === 0,
-      joinedRooms,
-      errors: errors.length > 0 ? errors : undefined,
-    });
+    if (callback) {
+      callback({
+        success: errors.length === 0,
+        joinedRooms,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    }
   }
 
   private async handleLeaveRooms(
     socket: Socket,
-    rooms: string[],
-    callback: (response: any) => void,
+    room: string | string[],
+    callback?: (response: any) => void,
   ) {
+    const rooms = Array.isArray(room) ? room : [room];
     this.logger.warn(`Attempting to leave rooms: ${rooms.join(', ')}`);
     const leftRooms: string[] = [];
     const errors: string[] = [];
 
-    for (const room of rooms) {
-      const business = await this.businessService.findBusinessByPublicId(room);
+    for (const r of rooms) {
+      const business = await this.businessService.findBusinessByPublicId(r);
       if (business) {
         const roomName = business.orderingBusinessId.toString();
         await socket.leave(roomName);
         leftRooms.push(roomName);
         this.logger.warn(`Socket ${socket.id} left room ${roomName} for business ${business.name}`);
       } else {
-        errors.push(`No business found for ${room}`);
-        this.logger.error(`No business found for ${room}`);
+        errors.push(`No business found for ${r}`);
+        this.logger.error(`No business found for ${r}`);
       }
     }
 
     this.updateActiveRooms();
     this.logActiveRooms();
 
-    callback({
-      success: errors.length === 0,
-      leftRooms,
-      errors: errors.length > 0 ? errors : undefined,
-    });
+    if (callback) {
+      callback({
+        success: errors.length === 0,
+        leftRooms,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    }
   }
 
   private updateActiveRooms() {
