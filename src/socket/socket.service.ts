@@ -25,6 +25,7 @@ import { AcknowledgementType, BaseAcknowledgement, EmitOptions } from './dto';
 export class SocketService implements OnModuleInit {
   private readonly logger = new Logger(SocketService.name);
   @WebSocketServer() public server: Server;
+  private activeRooms: Set<string> = new Set();
   constructor(
     private readonly businessService: BusinessService,
     private readonly orderingOrderMapperService: OrderingOrderMapperService,
@@ -44,12 +45,17 @@ export class SocketService implements OnModuleInit {
   }
 
   private handleSocketConnection(socket: any) {
-    socket.on('join', async (room: string) => {
-      await this.handleJoinRoom(socket, room);
+    socket.on('joinRooms', async (rooms: string[], callback) => {
+      await this.handleJoinRooms(socket, rooms, callback);
     });
 
-    socket.on('leave', async (room: string) => {
-      await this.handleLeaveRoom(socket, room);
+    socket.on('leaveRooms', async (rooms: string[], callback) => {
+      await this.handleLeaveRooms(socket, rooms, callback);
+    });
+
+    socket.on('disconnect', () => {
+      this.logger.log(`Socket ${socket.id} disconnected`);
+      this.updateActiveRooms();
     });
 
     socket.on('ping', async (data: string) => {
@@ -65,37 +71,84 @@ export class SocketService implements OnModuleInit {
     });
   }
 
-  private async handleJoinRoom(socket: Socket, room: string) {
-    this.logger.warn(`Attempting to join room ${room}`);
-    const business = await this.businessService.findBusinessByPublicId(room);
+  private async handleJoinRooms(
+    socket: Socket,
+    rooms: string[],
+    callback: (response: any) => void,
+  ) {
+    this.logger.warn(`Attempting to join rooms: ${rooms.join(', ')}`);
+    const joinedRooms: string[] = [];
+    const errors: string[] = [];
 
-    if (!business) {
-      this.logger.error(`No business found for ${room}`);
-      return;
+    for (const room of rooms) {
+      const business = await this.businessService.findBusinessByPublicId(room);
+      if (business) {
+        const roomName = business.orderingBusinessId.toString();
+        await socket.join(roomName);
+        joinedRooms.push(roomName);
+        this.activeRooms.add(roomName);
+        this.logger.warn(
+          `Socket ${socket.id} joined room ${roomName} for business ${business.name}`,
+        );
+      } else {
+        errors.push(`No business found for ${room}`);
+        this.logger.error(`No business found for ${room}`);
+      }
     }
 
-    const roomName = business.orderingBusinessId.toString();
-    socket.join(roomName);
+    this.updateActiveRooms();
+    this.logActiveRooms();
 
-    this.logger.warn(`Socket ${socket.id} joined room ${roomName} for business ${business.name}`);
-
-    // Log all rooms this socket has joined
-    const joinedRooms = Array.from(socket.rooms.values()).filter((r) => r !== socket.id);
-    this.logger.log(`Socket ${socket.id} is now in rooms: ${joinedRooms.join(', ')}`);
-
-    // Optionally, you can emit a confirmation to the client
-    socket.emit('roomJoined', { room: roomName, businessName: business.name });
+    callback({
+      success: errors.length === 0,
+      joinedRooms,
+      errors: errors.length > 0 ? errors : undefined,
+    });
   }
 
-  private async handleLeaveRoom(socket: any, room: string) {
-    this.logger.warn(`Try to leave room ${room}`);
-    const business = await this.businessService.findBusinessByPublicId(room);
-    if (!business) {
-      this.logger.error(`No business found for ${room}`);
-    } else {
-      this.logger.warn(`leave ${room} and business is ${business.name}`);
-      socket.leave(business.orderingBusinessId.toString());
+  private async handleLeaveRooms(
+    socket: Socket,
+    rooms: string[],
+    callback: (response: any) => void,
+  ) {
+    this.logger.warn(`Attempting to leave rooms: ${rooms.join(', ')}`);
+    const leftRooms: string[] = [];
+    const errors: string[] = [];
+
+    for (const room of rooms) {
+      const business = await this.businessService.findBusinessByPublicId(room);
+      if (business) {
+        const roomName = business.orderingBusinessId.toString();
+        await socket.leave(roomName);
+        leftRooms.push(roomName);
+        this.logger.warn(`Socket ${socket.id} left room ${roomName} for business ${business.name}`);
+      } else {
+        errors.push(`No business found for ${room}`);
+        this.logger.error(`No business found for ${room}`);
+      }
     }
+
+    this.updateActiveRooms();
+    this.logActiveRooms();
+
+    callback({
+      success: errors.length === 0,
+      leftRooms,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  }
+
+  private updateActiveRooms() {
+    this.activeRooms = new Set(this.server.sockets.adapter.rooms.keys());
+    // Remove socket IDs from the set of rooms
+    for (const socketId of this.server.sockets.sockets.keys()) {
+      this.activeRooms.delete(socketId);
+    }
+  }
+
+  private logActiveRooms() {
+    this.logger.log(`Current active rooms: ${Array.from(this.activeRooms).join(', ')}`);
+    this.logger.log(`Total number of active rooms: ${this.activeRooms.size}`);
   }
 
   async emitWithAcknowledgement({
