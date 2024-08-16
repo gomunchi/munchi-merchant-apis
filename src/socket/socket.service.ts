@@ -45,11 +45,11 @@ export class SocketService implements OnModuleInit {
   }
 
   private handleSocketConnection(socket: any) {
-    socket.on('joinRooms', async (rooms: string[], callback) => {
+    socket.on('join', async (rooms: string[], callback) => {
       await this.handleJoinRooms(socket, rooms, callback);
     });
 
-    socket.on('leaveRooms', async (rooms: string[], callback) => {
+    socket.on('leave', async (rooms: string[], callback) => {
       await this.handleLeaveRooms(socket, rooms, callback);
     });
 
