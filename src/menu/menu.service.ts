@@ -23,6 +23,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import moment from 'moment';
+import { MenuDataProcessorService } from './menu-process.service';
 
 @Injectable()
 export class MenuService {
@@ -31,6 +32,7 @@ export class MenuService {
     private orderingService: OrderingService,
     private orderingMenuMapperService: OrderingMenuMapperService,
     private woltMenuMapperService: WoltMenuMapperService,
+    private menuDataProcessService: MenuDataProcessorService,
     private woltService: WoltService,
     private prismaService: PrismaService,
     private businessService: BusinessService,
@@ -156,6 +158,24 @@ export class MenuService {
     // TODO: can add cached here
 
     return mappedCategoryData;
+  }
+
+  async getBusinessMenuProduct(orderingUserId: number, publicBusinessId: string) {
+    // Get access token
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const orderingBusinessData = await this.orderingService.getBusinessById(
+      orderingAccessToken,
+      business.orderingBusinessId,
+    );
+
+    const result = await this.menuDataProcessService.processMenuData(orderingBusinessData);
+
+    return result;
   }
 
   async getUnavailableBusinessProduct(orderingUserId: number, publicBusinessId: string) {
@@ -358,7 +378,7 @@ export class MenuService {
 
     return woltMenuData;
   }
-  
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async processMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
