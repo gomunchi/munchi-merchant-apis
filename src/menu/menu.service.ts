@@ -378,7 +378,7 @@ export class MenuService {
 
     return woltMenuData;
   }
-  
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async processMenuTracking() {
     const menuQueue = await this.prismaService.menuTracking.findMany({
