@@ -10,6 +10,7 @@ import {
   Res,
   UseGuards,
   ValidationPipe,
+  Version,
 } from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -50,6 +51,18 @@ export class MenuController {
     const { orderingUserId } = request.user;
 
     return this.menuService.getWoltMenuCategory(orderingUserId, businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('product')
+  @Version('2')
+  getBusinessProductV2(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getBusinessMenuProduct(orderingUserId, menuQuery.businessPublicId);
   }
 
   @UseGuards(JwtGuard)
