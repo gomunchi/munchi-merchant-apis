@@ -7,6 +7,7 @@ import moment from 'moment-timezone';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from 'src/business/business.service';
 import { OneSignalService } from 'src/onesignal/onesignal.service';
+import { OrderResponse } from 'src/order/dto/order.dto';
 
 @Injectable()
 export class NotificationService {
@@ -19,7 +20,7 @@ export class NotificationService {
   ) {}
 
   @OnEvent('newOrder.notification')
-  async sendNewOrderNotification(orderingBusinessId: string) {
+  async sendNewOrderNotification(orderingBusinessId: string, order: OrderResponse) {
     const business = await this.businessService.findBusinessByOrderingId(orderingBusinessId, {
       include: {
         sessions: true,
@@ -40,7 +41,7 @@ export class NotificationService {
     this.logger.warn(`Make new order push notification to: ${deviceIds}`);
 
     if (deviceIds.length > 0) {
-      this.onesignal.pushNewOrderNotification([...new Set(deviceIds)]);
+      this.onesignal.pushNewOrderNotification([...new Set(deviceIds)], order);
     }
   }
 
