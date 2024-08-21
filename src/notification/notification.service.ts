@@ -1,13 +1,12 @@
-import { WebhookService } from './../webhook/webhook.service';
 // notification/notification.service.ts
 
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Interval } from '@nestjs/schedule';
-import { OneSignalService } from 'src/onesignal/onesignal.service';
-import { BusinessService } from 'src/business/business.service';
 import moment from 'moment-timezone';
 import { SessionService } from 'src/auth/session.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { BusinessService } from 'src/business/business.service';
+import { OneSignalService } from 'src/onesignal/onesignal.service';
 
 @Injectable()
 export class NotificationService {
@@ -16,11 +15,10 @@ export class NotificationService {
   constructor(
     private readonly onesignal: OneSignalService,
     private readonly sessionService: SessionService,
-    private readonly prismaService: PrismaService,
     @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
-    @Inject(forwardRef(() => WebhookService)) private webhookService: WebhookService,
   ) {}
 
+  @OnEvent('newOrder.notification')
   async sendNewOrderNotification(orderingBusinessId: string) {
     const business = await this.businessService.findBusinessByOrderingId(orderingBusinessId, {
       include: {
@@ -43,6 +41,43 @@ export class NotificationService {
 
     if (deviceIds.length > 0) {
       this.onesignal.pushNewOrderNotification([...new Set(deviceIds)]);
+    }
+  }
+
+  @OnEvent('preorder.notification')
+  async sendPreorderNotification(businessPublicId: string, orderNumber: string) {
+    try {
+      const business = await this.businessService.findBusinessByPublicIdWithPayload(
+        businessPublicId,
+        {
+          include: {
+            sessions: true,
+          },
+        },
+      );
+
+      this.logger.warn(`Send preorder reminder push notification to ${business.name}`);
+
+      if (!business) {
+        return;
+      }
+
+      const deviceIds = [];
+
+      for (const session of business.sessions) {
+        deviceIds.push(session.deviceId);
+      }
+
+      this.logger.warn(`Make preorder reminder push notification to: ${deviceIds}`);
+
+      if (deviceIds.length > 0) {
+        this.onesignal.pushPreorderNotification([...new Set(deviceIds)], orderNumber);
+        this.logger.log(`Successfully sent push notifications for order ${orderNumber}`);
+      } else {
+        this.logger.warn(`No device IDs found for business ${business.name}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to send preorder notification: ${error}`);
     }
   }
 

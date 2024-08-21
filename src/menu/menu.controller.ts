@@ -1,21 +1,40 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
+  Patch,
+  Post,
   Query,
   Req,
   Res,
   UseGuards,
   ValidationPipe,
+  Version,
 } from '@nestjs/common';
-import { MenuService } from './menu.service';
-import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import { ApiOperation } from '@nestjs/swagger';
 import { Response } from 'express';
-import { MenuQuery } from './dto/menu.dto';
+import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import {
+  ValidatedBusinessId,
+  ValidatedCategoryBody,
+  ValidatedMenuTrackingBody,
+  ValidatedProductBody,
+  ValidatedSuboptionBody,
+} from './dto/menu.dto';
+import { MenuService } from './menu.service';
 
 @Controller('menu')
 export class MenuController {
   constructor(private menuService: MenuService) {}
+
+  @UseGuards(JwtGuard)
+  @Get('wolt')
+  getWoltMenu(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getWoltMenu(orderingUserId, businessPublicId);
+  }
 
   @UseGuards(JwtGuard)
   @Get('category')
@@ -26,6 +45,7 @@ export class MenuController {
   }
 
   @UseGuards(JwtGuard)
+  @ApiOperation({ deprecated: true })
   @Get('category/wolt')
   getWoltMenuCategory(@Req() request: any, @Query('businessPublicId') businessPublicId: string) {
     const { orderingUserId } = request.user;
@@ -35,17 +55,43 @@ export class MenuController {
 
   @UseGuards(JwtGuard)
   @Get('product')
-  getBusinessProduct(@Req() request: any, @Query(new ValidationPipe()) menuQuery: MenuQuery) {
+  @Version('2')
+  getBusinessProductV2(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getBusinessMenuProduct(orderingUserId, menuQuery.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('product')
+  getBusinessProduct(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
     const { orderingUserId } = request.user;
 
     return this.menuService.getBusinessProduct(orderingUserId, menuQuery.businessPublicId);
   }
 
   @UseGuards(JwtGuard)
+  @Get('option')
+  getBusinessProductOption(
+    @Req() request: any,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.getBusinessProductOption(orderingUserId, menuQuery.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
   @Get('product/unavailable')
   getUnavailableBusinessProduct(
     @Req() request: any,
-    @Query(new ValidationPipe()) menuQuery: MenuQuery,
+    @Query(new ValidationPipe()) menuQuery: ValidatedBusinessId,
   ) {
     const { orderingUserId } = request.user;
 
@@ -53,6 +99,51 @@ export class MenuController {
       orderingUserId,
       menuQuery.businessPublicId,
     );
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('category')
+  businessCategory(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedCategoryBody,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.editBusinessCategory(orderingUserId, bodyData);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('products')
+  businessProduct(@Req() request: any, @Body(new ValidationPipe()) bodyData: ValidatedProductBody) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.editBusinessProduct(orderingUserId, bodyData);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('suboptions')
+  businessSuboption(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedSuboptionBody,
+  ) {
+    const { orderingUserId } = request.user;
+
+    return this.menuService.editBusinessSuboption(orderingUserId, bodyData);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('tracking')
+  menuTracking(@Req() request: any, @Query(new ValidationPipe()) query: ValidatedBusinessId) {
+    return this.menuService.getTrackingData(query.businessPublicId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('tracking')
+  menuTrackingInformation(
+    @Req() request: any,
+    @Body(new ValidationPipe()) bodyData: ValidatedMenuTrackingBody,
+  ) {
+    return this.menuService.createMenuSynchronizationTracking(bodyData);
   }
 
   @UseGuards(JwtGuard)

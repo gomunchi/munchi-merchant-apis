@@ -1,17 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { Prisma } from '@prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 import { OrderResponse } from 'src/order/dto/order.dto';
 import { WoltOrderPrismaSelectArgs } from '../wolt/dto/wolt-order.dto';
 
 @Injectable()
 export class OrderingSyncService {
-  constructor(
-    private prismaService: PrismaService,
-    private orderingOrderMapperService: OrderingOrderMapperService,
-  ) {}
+  constructor(private prismaService: PrismaService) {}
 
   async syncOrderingOrder(mappedOrderingOrder: OrderResponse): Promise<any> {
     const orderUpdateInputAgrs = Prisma.validator<Prisma.OrderUpdateInput>()({

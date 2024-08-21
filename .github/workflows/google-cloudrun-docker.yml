@@ -1,0 +1,57 @@
+name: Build and Deploy to Google Cloud
+
+on:
+  push:
+    branches: [ development ] # Trigger the workflow on push to main branch
+env:
+  REGISTRY: ${{ secrets.GCP_REGISTRY }}
+  REPOSITORY: ${{ secrets.GCP_REPOSITORY }}
+  GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  IMAGE_NAME: munchi-merchant-api 
+  SERVICE_NAME: munchi-merchant-dev-api # If this is different from the image name
+  REGION: europe-north1 # Assuming this is your region, adjust if necessary
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: '${{ env.GCP_SA_KEY }}'
+
+    - name: Configure Docker
+      run: |
+        gcloud auth configure-docker ${{ env.REGISTRY }}
+
+    - name: Set execute permissions for scripts
+      run: |
+        chmod +x scripts/build_gcloud_image.sh
+        chmod +x scripts/push_gcloud_image.sh
+
+    - name: Build Docker image
+      run: ./scripts/build_gcloud_image.sh
+
+    - name: Push Docker image
+      run: ./scripts/push_gcloud_image.sh
+ 
+    - name: Deploy new revision to Cloud Run
+      run: |
+        FULL_IMAGE_NAME="${REGISTRY}/${PROJECT_ID}/${REPOSITORY}/${IMAGE_NAME}:latest"
+        echo "Deploying image: $FULL_IMAGE_NAME"
+        gcloud run deploy "${SERVICE_NAME}" \
+          --image "${FULL_IMAGE_NAME}" \
+          --platform managed \
+          --region "${REGION}" \
+          --project "${PROJECT_ID}"
+    - name: Print completion message
+      run: echo "Build and push completed for ${{ env.IMAGE_NAME }}"

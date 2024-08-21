@@ -1,214 +1,156 @@
-import { Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
-import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets/decorators';
-import { PreorderQueue } from '@prisma/client';
-import { Server } from 'socket.io';
+import { Injectable, Logger } from '@nestjs/common';
 import { BusinessService } from 'src/business/business.service';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { OrderingOrderMapperService } from 'src/provider/ordering/ordering-order-mapper';
 import { OrderingRepositoryService } from 'src/provider/ordering/ordering-repository';
 import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { OrderingOrderStatus } from 'src/provider/ordering/ordering.type';
-import { ProviderEnum } from 'src/provider/provider.type';
 import { WoltOrderMapperService } from 'src/provider/wolt/wolt-order-mapper';
-import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
-import { UtilsService } from 'src/utils/utils.service';
-import { NotificationService } from './../notification/notification.service';
-import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
+import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
+import { WoltWebhookService } from 'src/provider/wolt/wolt-webhook';
+import { SocketService } from 'src/socket/socket.service';
+import { UtilsService } from 'src/utils/utils.service';
 
-@WebSocketGateway({
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true,
-  path: '/socket.io',
-})
 @Injectable()
-export class WebhookService implements OnModuleInit {
+export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
-  @WebSocketServer() public server: Server;
   constructor(
-    @Inject(forwardRef(() => BusinessService)) private businessService: BusinessService,
+    private businessService: BusinessService,
     private utils: UtilsService,
-    private notificationService: NotificationService,
+    private errorHandlingService: ErrorHandlingService,
     private woltService: WoltService,
+    private woltWebhookService: WoltWebhookService,
     private orderingService: OrderingService,
     private orderingOrderMapperService: OrderingOrderMapperService,
     private orderingRepositoryService: OrderingRepositoryService,
-    private prismaService: PrismaService,
     private woltOrderMapperService: WoltOrderMapperService,
-    private woltRepositoryService: WoltRepositoryService,
+    private eventEmitter: EventEmitter2,
+    private socketService: SocketService,
   ) {}
 
-  onModuleInit() {
-    const ioServer = this.server;
-
-    ioServer.on('connection', (socket) => {
-      socket.on('join', async (room: string) => {
-        this.logger.warn(`Try to join room ${room}`);
-        const business = await this.businessService.findBusinessByPublicId(room);
-        if (!business) {
-          this.logger.error(`No business found for ${room}`);
-          // throw new ForbiddenException(403, `No business found for ${room}`);
-        } else {
-          this.logger.warn(`join ${room} and business is ${business.name}`);
-          socket.join(business.orderingBusinessId.toString());
-        }
-      });
-
-      socket.on('leave', async (room: string) => {
-        this.logger.warn(`Try to leave room ${room}`);
-        const business = await this.businessService.findBusinessByPublicId(room);
-        if (!business) {
-          this.logger.error(`No business found for ${room}`);
-          //throw new ForbiddenException(403, `No business found for ${room}`);
-        } else {
-          this.logger.warn(`leave ${room} and business is ${business.name}`);
-          socket.leave(business.orderingBusinessId.toString());
-        }
-      });
-
-      socket.on('ping', async (data: string) => {
-        this.logger.log(`Event emiited from user ${data}`);
-      });
-
-      /**
-       * Notify when new order popup is closed and server emit event
-       * back for other apps if avaiable to close the popup for same order
-       */
-      socket.on('order-popup-closed', async (orderId: string, businessId: string) => {
-        this.server.to(businessId).emit('close-order-popup', orderId);
-      });
-    });
-  }
-
   async emitUpdateAppState(deviceId: string) {
-    this.server.emit('update-app-state', deviceId);
+    this.socketService.emitUpdateAppState(deviceId);
   }
 
-  async newOrderNotification(order: OrderingOrder) {
-    const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+  async newOrderNotification(order: OrderingOrder): Promise<string> {
+    this.logger.log(`Processing new order notification for order ${order.id}`);
 
-    //Save order data from ordering webhook
-    await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
     try {
-      this.logger.log(`Emit order register to business ${order.business.name}`);
-      this.server.to(order.business_id.toString()).emit('orders_register', formattedOrder);
-      this.notificationService.sendNewOrderNotification(order.business_id.toString());
+      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
 
-      return 'Order sent';
+      await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
+
+      this.logger.log(`Emitting order register event to business ${order.business.name}`);
+
+      const ackResult = await this.socketService.emitWithAcknowledgement({
+        room: order.business_id.toString(),
+        event: 'orders_register',
+        data: formattedOrder,
+        acknowledgementType: 'orders_register',
+        timeout: 10000, // 10 seconds
+        retries: 3,
+        retryDelay: 2000, // 2 seconds, will increase with each retry
+      });
+
+      if (ackResult.received) {
+        this.logger.log(`Order register event acknowledged: ${ackResult.message}`);
+      } else {
+        this.logger.warn(
+          `No acknowledgement received for order ${order.id} from business ${order.business.name}`,
+        );
+      }
+
+      this.eventEmitter.emit('newOrder.notification', order.business_id.toString());
+
+      this.logger.log(`Successfully processed new order notification for order ${order.id}`);
+      return 'Order processed and notified successfully';
     } catch (error) {
-      this.utils.logError(error);
+      this.errorHandlingService.handleError(error, 'newOrderNotification');
     }
   }
 
   async changeOrderNotification(order: OrderingOrder) {
-    const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
     if (
       order.status === OrderingOrderStatus.Pending &&
       order.reporting_data.at.hasOwnProperty(`status:${OrderingOrderStatus.Preorder}`)
     ) {
       return;
     } else {
+      this.eventEmitter.emit('preorderQueue.validate', order.id.toString());
+
       try {
-        this.server.to(order.business_id.toString()).emit('order_change', formattedOrder);
+        const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+        const ackResult = await this.socketService.emitWithAcknowledgement({
+          room: order.business_id.toString(),
+          event: 'order_change',
+          data: formattedOrder,
+          acknowledgementType: 'order_change',
+          timeout: 10000, // 10 seconds
+          retries: 3,
+          retryDelay: 2000, // 2 seconds, will increase with each retry
+        });
+
+        if (ackResult.received) {
+          this.logger.log(`Order register event acknowledged: ${ackResult.message}`);
+        } else {
+          this.logger.warn(
+            `No acknowledgement received for order ${formattedOrder.orderNumber} from business ${order.business.name}`,
+          );
+        }
         await this.orderingService.syncOrderingOrder(order.id.toString());
       } catch (error) {
-        this.utils.logError(error);
+        this.errorHandlingService.handleError(error, 'changeOrderNotification');
       }
     }
   }
 
-  async woltOrderNotification(woltWebhookdata: WoltOrderNotification) {
+  public async processWoltOrder(woltWebhookdata: WoltOrderNotification) {
     const venueId = woltWebhookdata.order.venue_id;
-    // Get apiKey by venue id
-    const woltCredentals = await this.woltService.getWoltCredentials(venueId, 'venueId');
-
-    let woltOrder = await this.woltService.getOrderById(
-      woltCredentals.apiKey,
+    const woltCredentials = await this.woltService.getWoltCredentials(venueId, 'order');
+    let order = await this.woltService.getOrderById(
+      woltCredentials.value,
       woltWebhookdata.order.id,
     );
+    const business = await this.businessService.findBusinessByWoltVenueId(venueId);
 
-    // Find business to get business id for socket to emit
-    const business = await this.businessService.findBusinessByWoltVenueid(venueId);
+    if (order.delivery.type === 'homedelivery') {
+      order = await this.woltWebhookService.updatePickupTime(order, venueId);
+    }
 
-    // Update pick up time. Sometimes Wolt hasn't fully update pick up time
-    if (woltOrder.delivery.type === 'homedelivery') {
-      const maxRetries = 10;
-      const retryInterval = 500;
+    return { order, venueId, business, woltCredentials };
+  }
 
-      for (let i = 0; i < maxRetries; i++) {
-        if (woltOrder.pickup_eta !== null) {
-          break; // Exit loop if pickup_eta is present
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, retryInterval));
-          woltOrder = await this.woltService.getOrderById(woltWebhookdata.order.id, venueId); // Refetch
-        }
+  async woltOrderNotification(woltWebhookdata: WoltOrderNotification): Promise<string> {
+    this.logger.log(`Received Wolt webhook data: ${JSON.stringify(woltWebhookdata)}`);
+
+    try {
+      const { order, venueId, business, woltCredentials } = await this.processWoltOrder(
+        woltWebhookdata,
+      );
+      const formattedWoltOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(order);
+
+      if (this.woltWebhookService.isNewOrder(woltWebhookdata)) {
+        await this.woltWebhookService.handleNewWoltOrder(formattedWoltOrder, business);
+        return 'New order processed';
       }
-    }
-    const formattedWoltOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(woltOrder);
-    // Common processing for CREATED orders
-    if (
-      woltWebhookdata.order.status === 'CREATED' &&
-      woltWebhookdata.type === 'order.notification'
-    ) {
-      await this.woltRepositoryService.saveWoltOrder(formattedWoltOrder);
-      this.server.to(business.orderingBusinessId).emit('orders_register', formattedWoltOrder);
-      this.notificationService.sendNewOrderNotification(business.orderingBusinessId);
-      return 'Order sent';
-    }
 
-    // Sync order again
-
-    await this.woltService.syncWoltOrder(woltCredentals.apiKey, woltWebhookdata.order.id);
-
-    //Log the last order
-    if (woltWebhookdata.order.status === 'DELIVERED') {
-      this.logger.log(`latest order: ${JSON.stringify(woltOrder)}`);
+      await this.woltWebhookService.handleExistingWoltOrder(
+        woltWebhookdata,
+        formattedWoltOrder,
+        woltCredentials.value,
+        business,
+      );
+      return 'Order update processed';
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'woltOrderNotification');
     }
-    this.server.to(business.orderingBusinessId).emit('order_change', formattedWoltOrder);
   }
 
   async notifyCheckBusinessStatus(businessPublicId: string) {
-    const business = await this.businessService.findBusinessByPublicId(businessPublicId);
-    this.logger.warn(`Business status changed: ${business.name}`);
-    const message = `${business.name} status changed`;
-    this.server.to(business.orderingBusinessId).emit('business_status_change', message);
-  }
-
-  async remindPreOrder({ businessPublicId, orderId, provider }: PreorderQueue) {
-    const business = await this.businessService.findBusinessByPublicId(businessPublicId);
-
-    //Get munchi api key
-    const orderingApiKey = await this.prismaService.apiKey.findFirst({
-      where: {
-        name: 'ORDERING_API_KEY',
-      },
-    });
-
-    let order: any;
-    if (provider === ProviderEnum.Wolt) {
-      order = await this.woltRepositoryService.getOrderByIdFromDb(orderId.toString());
-    } else {
-      const orderingOrder = await this.orderingService.getOrderById(
-        '',
-        orderId.toString(),
-        orderingApiKey.value,
-      );
-      order = await this.orderingOrderMapperService.mapOrderToOrderResponse(orderingOrder);
-    }
-    const message = `It's time for you to prepare order ${order.orderNumber}`;
-    this.server.to(business.orderingBusinessId).emit('preorder', {
-      message: message,
-      order: order,
-    });
-
-    this.logger.warn(`cron notify preorder reminder complete ${business.publicId}`);
-    // this.schedulerRegistry.deleteCronJob(order.id);
+    this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 }

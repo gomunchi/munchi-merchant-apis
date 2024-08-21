@@ -1,17 +1,22 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Business as BusinessPrisma, BusinessProviders, Provider } from '@prisma/client';
 import axios from 'axios';
 import { plainToInstance } from 'class-transformer';
 import { Business } from 'ordering-api-sdk';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AuthCredentials, OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { ProviderService } from '../provider.service';
-import { WoltMenuData } from '../wolt/dto/wolt-menu.dto';
+import { ProviderEnum } from '../provider.type';
+import { WoltCategory, WoltMenuData } from '../wolt/dto/wolt-menu.dto';
 import { WoltService } from '../wolt/wolt.service';
 import { OrderingMenuCategory } from './dto/ordering-menu.dto';
 import { OrderingOrder } from './dto/ordering-order.dto';
+import { OrderingMenuMapperService } from './ordering-menu-mapper';
 import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
 import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
@@ -25,8 +30,11 @@ export class OrderingService implements ProviderService {
     private utilService: UtilsService,
     private readonly prismaService: PrismaService,
     private readonly orderingOrderMapperService: OrderingOrderMapperService,
+    private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly orderingSyncService: OrderingSyncService,
     private readonly woltService: WoltService,
+    private readonly errorHandlingService: ErrorHandlingService,
+    private eventEmitter: EventEmitter2,
   ) {
     this.woltApiUrl = this.configService.get('WOLT_API_URL');
   }
@@ -322,16 +330,23 @@ export class OrderingService implements ProviderService {
     try {
       const response = await axios.request(options);
 
-      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
-        response.data.result,
-      );
-      return formattedOrder;
+      if (orderData.orderStatus === OrderStatusEnum.PREORDER) {
+        this.eventEmitter.emit('zapier.trigger', response.data.result);
+      }
+
+      return response.data.result;
     } catch (error) {
       this.utilService.logError(error);
     }
   }
 
-  async rejectOrder(orderingUserId: number, orderId: string): Promise<OrderResponse> {
+  async rejectOrder(
+    orderingUserId: number,
+    orderId: string,
+    orderRejectData: {
+      reason: string;
+    },
+  ): Promise<OrderResponse> {
     const accessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
     const options = {
@@ -343,6 +358,7 @@ export class OrderingService implements ProviderService {
       },
       data: {
         status: OrderingOrderStatus.RejectedByBusiness,
+        reject_reason: orderRejectData.reason,
       },
     };
     try {
@@ -469,6 +485,7 @@ export class OrderingService implements ProviderService {
   async getMenuCategory(
     orderingAccessToken: string,
     orderingBusinessId: string,
+    apiKey?: string,
   ): Promise<OrderingMenuCategory[]> {
     const options = {
       method: 'GET',
@@ -479,6 +496,10 @@ export class OrderingService implements ProviderService {
       },
     };
 
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
+
     try {
       const response = await axios.request(options);
       return response.data.result;
@@ -488,10 +509,7 @@ export class OrderingService implements ProviderService {
   }
 
   async syncMenu(woltVenueId: string, orderingUserId: number, woltMenuData: WoltMenuData) {
-    const woltCredentials = await this.woltService.getWoltCredentials(
-      orderingUserId,
-      'orderingUserId',
-    );
+    const woltCredentials = await this.woltService.getWoltCredentials(woltVenueId, 'menu');
 
     try {
       const response = await axios.post(
@@ -507,7 +525,6 @@ export class OrderingService implements ProviderService {
 
       return response.data;
     } catch (error: any) {
-      // await this.syncWoltBusiness(woltOrderId);
       throw new ForbiddenException(error.response ? error.response.data : error.message);
     }
   }
@@ -557,6 +574,30 @@ export class OrderingService implements ProviderService {
         images: productData.product.image_url ?? undefined,
         enabled: productData.enabled.enabled,
       },
+    };
+
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+    }
+  }
+
+  async editCategory(
+    orderingAccessToken: string,
+    orderingBusinessId: string,
+    categoryId: string,
+    data: unknown,
+  ) {
+    const options = {
+      method: 'POST',
+      url: this.utilService.getEnvUrl('business', `${orderingBusinessId}/categories/${categoryId}`),
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${orderingAccessToken}`,
+      },
+      data: data,
     };
 
     try {
@@ -624,7 +665,7 @@ export class OrderingService implements ProviderService {
     orderingBusinessId: string,
     categoryId: string,
     productId: string,
-    data: any,
+    data: unknown,
   ) {
     const options = {
       method: 'POST',
@@ -636,9 +677,36 @@ export class OrderingService implements ProviderService {
         accept: 'application/json',
         Authorization: `Bearer ${orderingAccessToken}`,
       },
-      data: {
-        extras: data,
+      data: data,
+    };
+
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+    }
+  }
+
+  async editProductSuboptions(
+    orderingAccessToken: string,
+    orderingBusinessId: string,
+    extraId: string,
+    optionId: string,
+    suboptionId: string,
+    data: unknown,
+  ) {
+    const options = {
+      method: 'PUT',
+      url: this.utilService.getEnvUrl(
+        'business',
+        `${orderingBusinessId}/extras/${extraId}/options/${optionId}/suboptions/${suboptionId}`,
+      ),
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${orderingAccessToken}`,
       },
+      data: data,
     };
 
     try {
@@ -705,7 +773,7 @@ export class OrderingService implements ProviderService {
     }
   }
 
-  async getProductExtras(orderingAccessToken: string, orderingBusinessId: string) {
+  async getProductExtras(orderingAccessToken: string, orderingBusinessId: string, apiKey?: string) {
     const options = {
       method: 'GET',
       url: this.utilService.getEnvUrl('business', `${orderingBusinessId}/extras`),
@@ -714,6 +782,10 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${orderingAccessToken}`,
       },
     };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
 
     try {
       const response = await axios.request(options);
@@ -760,12 +832,56 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${orderingAccessToken}`,
       },
     };
-    
+
     try {
       const response = await axios.request(options);
       return response.data.result;
     } catch (error) {
       this.utilService.logError(error);
+    }
+  }
+
+  async synchronizeMenuToWolt(
+    orderingAccessToken: string,
+    business: BusinessPrisma & {
+      provider: (BusinessProviders & {
+        provider: Provider;
+      })[];
+    },
+  ) {
+    const woltVenue = business.provider.filter(
+      (provider: any) => provider.provider.name === ProviderEnum.Wolt,
+    );
+
+    const menu = await this.getMenuCategory(orderingAccessToken, business.orderingBusinessId);
+
+    const result: WoltCategory[] = menu
+      .map((orderingCategory: OrderingMenuCategory) => {
+        if (orderingCategory.products.length === 0) {
+          return undefined; // Returns undefined
+        }
+        return this.orderingMenuMapperService.mapToWoltCategory(orderingCategory);
+      })
+      .filter(Boolean);
+
+    const woltMenuData: WoltMenuData = {
+      id: this.utilService.generatePublicId(),
+      currency: 'EUR',
+      primary_language: 'en',
+      categories: result,
+    };
+
+    await this.woltService.createMenu(woltVenue[0].providerId, woltMenuData);
+  }
+
+  public async getOrderingApiKey() {
+    try {
+      return await this.prismaService.apiKey.findFirst({
+        where: { name: 'ORDERING_API_KEY' },
+      });
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'getOrderingApiKey');
+      throw error; // Re-throw as this is critical for further operations
     }
   }
 }

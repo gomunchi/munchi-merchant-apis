@@ -1,25 +1,42 @@
-import { Injectable } from '@nestjs/common';
-import { Provider } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma, Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { BusinessService } from 'src/business/business.service';
 import { OrderingMenuCategory } from 'src/provider/ordering/dto/ordering-menu.dto';
 import { OrderingMenuMapperService } from 'src/provider/ordering/ordering-menu-mapper';
 import { OrderingService } from 'src/provider/ordering/ordering.service';
+import { ProviderManagmentService } from 'src/provider/provider-management.service';
 import { ProviderEnum } from 'src/provider/provider.type';
 import { MenuData, WoltCategory, WoltMenuData } from 'src/provider/wolt/dto/wolt-menu.dto';
+import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { UtilsService } from 'src/utils/utils.service';
-import { MenuCategoryDto } from './dto/menu.dto';
-import { WoltMenuMapperService } from 'src/provider/wolt/wolt-menu-mapper';
+import {
+  MenuCategoryDto,
+  MenuProductDto,
+  MenuProductOptionDto,
+  ValidatedCategoryBody,
+  ValidatedMenuTrackingBody,
+  ValidatedProductBody,
+  ValidatedSuboptionBody,
+} from './dto/menu.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import moment from 'moment';
+import { MenuDataProcessorService } from './menu-process.service';
 
 @Injectable()
 export class MenuService {
+  private readonly logger = new Logger(MenuService.name);
   constructor(
     private orderingService: OrderingService,
     private orderingMenuMapperService: OrderingMenuMapperService,
     private woltMenuMapperService: WoltMenuMapperService,
-    private businessService: BusinessService,
+    private menuDataProcessService: MenuDataProcessorService,
     private woltService: WoltService,
+    private prismaService: PrismaService,
+    private businessService: BusinessService,
+    private providerMangementService: ProviderManagmentService,
     private utilService: UtilsService,
   ) {}
   async getMenuCategory(orderingUserId: number, publicBusinessId: string) {
@@ -30,7 +47,7 @@ export class MenuService {
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
     const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+      (businessProvider) => businessProvider.provider.name === ProviderEnum.Wolt,
     );
 
     const menu = await this.orderingService.getMenuCategory(
@@ -38,7 +55,7 @@ export class MenuService {
       business.orderingBusinessId,
     );
 
-    //Map to wolt object and remove propertyn that has no product out of the result object
+    //Map to wolt object and remove property that has no product out of the result object
     const result: WoltCategory[] = menu
       .map((orderingCategory: OrderingMenuCategory) => {
         if (orderingCategory.products.length === 0) {
@@ -55,9 +72,6 @@ export class MenuService {
       categories: result,
     };
 
-    //Sync order to Wolt
-    await this.orderingService.syncMenu(woltVenue[0].providerId, orderingUserId, woltMenuData);
-
     return woltMenuData;
   }
 
@@ -70,9 +84,13 @@ export class MenuService {
 
     const orderingBusinessId = business.orderingBusinessId;
 
+    if (!business.provider || business.provider.length === 0) {
+      throw new NotFoundException('No provider associate with this business');
+    }
+
     // Get wolt Venue
     const woltVenue = business.provider.filter(
-      (provider: Provider) => provider.name === ProviderEnum.Wolt,
+      (businessProvider) => businessProvider.provider.name === ProviderEnum.Wolt,
     );
 
     // Get wolt Menu data
@@ -80,106 +98,6 @@ export class MenuService {
       orderingUserId,
       woltVenue[0].providerId,
     );
-
-    if (woltMenuData.status === 'READY') {
-      const { options } = woltMenuData.menu;
-      const orderingCategoryData = this.woltMenuMapperService.mapToOrderingCategory(woltMenuData);
-
-      // Create product extras
-      const extras = await this.orderingService.createProductsExtraField(
-        orderingAccessToken,
-        orderingBusinessId,
-      );
-
-      const newExtraId = typeof extras.id === 'number' ? extras.id.toString() : extras.id;
-
-      const extrasParentObj = {
-        id: newExtraId,
-        options: [],
-      };
-
-      // Create option extras
-      options.map(async (option) => {
-        extrasParentObj.options.push(option);
-        const formattedOption = this.woltMenuMapperService.mapToOrderingOption(option);
-        const newOption = await this.orderingService.createProductOptions(
-          orderingAccessToken,
-          orderingBusinessId,
-          newExtraId,
-          formattedOption,
-        );
-        const newOptionId =
-          typeof newOption.id === 'number' ? newOption.id.toString() : newOption.id;
-
-        // Create suboption extras
-        formattedOption.values.map(async (value) => {
-          await this.orderingService.createProductOptionsSuboptions(
-            orderingAccessToken,
-            orderingBusinessId,
-            newExtraId,
-            newOptionId,
-            value,
-          );
-        });
-      });
-
-      // Create category
-      orderingCategoryData.map(async (category: any) => {
-        const newCategory = await this.orderingService.createCategory(
-          orderingAccessToken,
-          orderingBusinessId,
-          category,
-        );
-
-        const newCategoryId =
-          typeof newCategory.id === 'number' ? newCategory.id.toString() : newCategory.id;
-
-        // Create products
-        category.products.map(async (product: any) => {
-          // Create product
-          const newProduct = await this.orderingService.createProducts(
-            orderingAccessToken,
-            orderingBusinessId,
-            newCategory.id,
-            product,
-          );
-          // Format product id
-          const newProductId =
-            typeof newProduct.id === 'number' ? newProduct.id.toString() : newProduct.id;
-
-          if (product.options.length === 0 || product.option_bindings.length === 0) {
-            return;
-          }
-
-          let hasMatch: boolean = false;
-
-          for (const productOption of product.options) {
-            const hasMatchingOption: boolean = extrasParentObj.options.some(
-              (extrasOption: any) => extrasOption.id === productOption.id,
-            );
-
-            if (hasMatchingOption) {
-              hasMatch = true;
-              break;
-            }
-          }
-          if (hasMatch) {
-            // Edit product (add extras to product)
-            await this.orderingService.editProduct(
-              orderingAccessToken,
-              orderingBusinessId,
-              newCategoryId,
-              newProductId,
-              `[${extrasParentObj.id}]`,
-            );
-          }
-
-          return;
-        });
-      });
-
-      return orderingCategoryData;
-    }
 
     return woltMenuData;
   }
@@ -225,6 +143,8 @@ export class MenuService {
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
     const categoryData = await this.orderingService.getMenuCategory(
@@ -235,26 +155,65 @@ export class MenuService {
     //Format category data to product data
     const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
 
+    // TODO: can add cached here
+
     return mappedCategoryData;
   }
 
-  async getUnavailableBusinessProduct(
-    orderingUserId: number,
-    publicBusinessId: string,
-  ) {
+  async getBusinessMenuProduct(orderingUserId: number, publicBusinessId: string) {
     // Get access token
     const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
-    const categoryData = await this.orderingService.getUnavailableMenuCategory(
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const orderingBusinessData = await this.orderingService.getBusinessById(
       orderingAccessToken,
       business.orderingBusinessId,
     );
+
+    const result = await this.menuDataProcessService.processMenuData(orderingBusinessData);
+
+    return result;
+  }
+
+  async getUnavailableBusinessProduct(orderingUserId: number, publicBusinessId: string) {
+    // Get access token
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
+
+    const categoryData = await this.orderingService.getMenuCategory(
+      orderingAccessToken,
+      business.orderingBusinessId,
+    );
+
+    const disabledProducts = categoryData.flatMap((category) =>
+      category.products.filter((product) => !product.enabled),
+    );
+
     //Format category data to product data
-    const mappedCategoryData = plainToInstance(MenuCategoryDto, categoryData);
+    const mappedCategoryData = plainToInstance(MenuProductDto, disabledProducts);
 
     return mappedCategoryData;
+  }
+
+  async getBusinessProductOption(orderingUserId: number, publicBusinessId: string) {
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
+
+    const extrasData = await this.orderingService.getProductExtras(
+      orderingAccessToken,
+      business.orderingBusinessId,
+    );
+
+    const optionsData = extrasData.flatMap((extra) => extra.options);
+
+    const mappedOPtionData = plainToInstance(MenuProductOptionDto, optionsData);
+
+    return mappedOPtionData;
   }
 
   async deleteAllCategory(orderingUserId: number, publicBusinessId: string) {
@@ -288,5 +247,199 @@ export class MenuService {
         category.id.toString(),
       );
     });
+  }
+
+  async editBusinessCategory(orderingUserId: number, bodyData: ValidatedCategoryBody) {
+    // Extract catgegory data from body
+    const { data: categories } = bodyData;
+
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    categories.forEach(async (category) => {
+      const { id, ...updatedCategory } = category;
+
+      await this.orderingService.editCategory(
+        orderingAccessToken,
+        orderingBusinessId,
+        category.id.toString(),
+        updatedCategory,
+      );
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async editBusinessProduct(orderingUserId: number, bodyData: ValidatedProductBody) {
+    // Extract catgegory data from body
+    const { data: products } = bodyData;
+
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    products.forEach(async (product) => {
+      const { categoryId, id, images, ...updatedProduct } = product;
+
+      await this.orderingService.editProduct(
+        orderingAccessToken,
+        orderingBusinessId,
+        product.categoryId.toString(),
+        product.id.toString(),
+        updatedProduct,
+      );
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async editBusinessSuboption(orderingUserId: number, bodyData: ValidatedSuboptionBody) {
+    // Extract catgegory data from body
+    const { data: suboptions } = bodyData;
+
+    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    suboptions.forEach(async (suboption) => {
+      const { extraOptionId: optionId, extraId, id: suboptionId, ...updatedSuboptions } = suboption;
+
+      await this.orderingService.editProductSuboptions(
+        orderingAccessToken,
+        orderingBusinessId,
+        extraId,
+        optionId.toString(),
+        suboptionId.toString(),
+        updatedSuboptions,
+      );
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async createMenuSynchronizationTracking(bodyData: ValidatedMenuTrackingBody) {
+    // Extract catgegory data from body
+    const { businessPublicId, timeSynchronize, type } = bodyData;
+
+    const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
+
+    const orderingBusinessId = business.orderingBusinessId;
+
+    // Create tracking
+    const data = Prisma.validator<Prisma.MenuTrackingUncheckedCreateInput>()({
+      name: `${business.name} menu tracking`,
+      synchronizeTime: timeSynchronize,
+      type: type,
+      businessPublicId: businessPublicId,
+    });
+
+    await this.prismaService.menuTracking.upsert({
+      where: {
+        businessPublicId: businessPublicId,
+      },
+      create: data,
+      update: data,
+    });
+
+    return {
+      message: 'Success',
+    };
+  }
+
+  async getWoltMenu(orderingUserId: number, businessPublicId: string) {
+    const business = await this.businessService.findBusinessByPublicId(businessPublicId);
+    const orderingBusinessId = business.orderingBusinessId;
+
+    if (!business.provider || business.provider.length === 0) {
+      throw new NotFoundException('No provider associate with this business');
+    }
+
+    // Get wolt Venue
+    const provider = business.provider.filter((p) => p.provider.name === ProviderEnum.Wolt);
+
+    // Get wolt Menu data
+    const woltMenuData: MenuData = await this.woltService.getMenuCategory(
+      orderingUserId,
+      provider[0].providerId,
+    );
+
+    return woltMenuData;
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async processMenuTracking() {
+    const menuQueue = await this.prismaService.menuTracking.findMany({
+      take: 10,
+      where: {
+        synchronizeTime: {
+          gt: new Date().toISOString(), // Use the current date and time for comparison
+        },
+      },
+    });
+
+    menuQueue.forEach(async (queue) => {
+      await this.prismaService.menuTracking.update({
+        where: {
+          businessPublicId: queue.businessPublicId,
+        },
+        data: {
+          processing: true,
+        },
+      });
+    });
+  }
+
+  @Cron(CronExpression.EVERY_QUARTER)
+  async onMenuTracking() {
+    const menuQueue = await this.prismaService.menuTracking.findMany({
+      take: 10,
+      where: {
+        synchronizeTime: {
+          gt: new Date().toISOString(), // Use the current date and time for comparison
+        },
+      },
+    });
+
+    this.logger.log(`Processing menu tracking queue : ${menuQueue.length}`);
+
+    menuQueue.forEach(async (queue) => {
+      const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
+      this.logger.log(`${queue.name}`);
+
+      if (calculatedTime === 0) {
+        const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
+
+        await this.providerMangementService.menuTracking(queue, business);
+      }
+    });
+  }
+
+  async getTrackingData(publicBusinessId: string) {
+    const menuTracking = await this.prismaService.menuTracking.findUnique({
+      where: {
+        businessPublicId: publicBusinessId,
+      },
+    });
+
+    if (!menuTracking) {
+      return {
+        message: 'No tracking at the moment',
+      };
+    }
+
+    return menuTracking;
   }
 }

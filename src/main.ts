@@ -1,12 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
-import { NestFactory, HttpAdapterHost } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder } from '@nestjs/swagger';
 import { SwaggerDocumentOptions, SwaggerModule } from '@nestjs/swagger/dist';
 import * as Sentry from '@sentry/node';
 import { SentryFilter } from './filters/sentry.filter';
 
-import { AppModule } from './app/app.module';
 import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
+import { AppModule } from './app/app.module';
+import { GlobalExceptionFilter } from './filters/globalexception.filter ';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['log', 'error', 'warn'],
@@ -49,7 +50,10 @@ async function bootstrap() {
 
   const { httpAdapter } = app.get(HttpAdapterHost);
 
-  app.useGlobalFilters(new SentryFilter(httpAdapter));
+  app.useGlobalFilters(
+    new SentryFilter(httpAdapter), // Sentry filter should be first to catch and log all exceptions
+    new GlobalExceptionFilter(), // Our custom filter to format the response
+  );
 
   app.enableCors({
     credentials: true,
