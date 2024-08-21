@@ -77,11 +77,17 @@ export class OneSignalService {
     }
   }
 
-  async pushNewOrderNotification(playerIds: string[], language = 'en') {
+  async pushNewOrderNotification(playerIds: string[], additionalData?: any) {
+    const orderId = additionalData.orderId || 'unknown';
+
     const notification = this.createNotification({
       include_player_ids: playerIds,
       android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
       template_id: PushNotificationTemplate.NEW_ORDER_REMINDER,
+      data: {
+        orderId: orderId,
+        action: 'mew_order',
+      },
     });
 
     try {
