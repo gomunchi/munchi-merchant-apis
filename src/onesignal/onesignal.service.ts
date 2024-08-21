@@ -85,12 +85,25 @@ export class OneSignalService {
       template_id: PushNotificationTemplate.NEW_ORDER_REMINDER,
     });
 
+    // Verify notification object
+    if (!notification || typeof notification !== 'object') {
+      this.logger.error('Failed to create notification object');
+      throw new Error('Notification creation failed');
+    }
+
+    // Add order data if provided
     if (order) {
-      notification.data = order;
+      if (typeof order !== 'object') {
+        this.logger.error('Invalid order object');
+        throw new Error('Invalid order data');
+      }
+      notification.data = { order };
     }
 
     try {
       await this.client.createNotification(notification);
+
+      this.logger.log(`Successfully processed new order notification for order ${order.id}`);
     } catch (error) {
       this.logger.error(`Error creating new order notification to: ${JSON.stringify(playerIds)}`);
       this.logger.error(error);

@@ -66,7 +66,6 @@ export class WebhookService {
 
       this.eventEmitter.emit('newOrder.notification', order.business_id.toString()), formattedOrder;
 
-      this.logger.log(`Successfully processed new order notification for order ${order.id}`);
       return 'Order processed and notified successfully';
     } catch (error) {
       this.errorHandlingService.handleError(error, 'newOrderNotification');
