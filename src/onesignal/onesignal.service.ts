@@ -6,6 +6,7 @@ import {
   PushNotificationChannel,
   PushNotificationTemplate,
 } from './onesignal.type';
+import { OrderResponse } from 'src/order/dto/order.dto';
 
 @Injectable()
 export class OneSignalService {
@@ -77,12 +78,16 @@ export class OneSignalService {
     }
   }
 
-  async pushNewOrderNotification(playerIds: string[], language = 'en') {
+  async pushNewOrderNotification(playerIds: string[], order?: OrderResponse) {
     const notification = this.createNotification({
       include_player_ids: playerIds,
       android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
       template_id: PushNotificationTemplate.NEW_ORDER_REMINDER,
     });
+
+    if (order) {
+      notification.data = order;
+    }
 
     try {
       await this.client.createNotification(notification);

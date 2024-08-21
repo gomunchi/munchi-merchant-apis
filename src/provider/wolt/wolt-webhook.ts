@@ -57,7 +57,11 @@ export class WoltWebhookService {
         `No acknowledgement received for new Wolt order ${formattedWoltOrder.orderNumber}`,
       );
     }
-    this.eventEmitter.emit('newOrder.notification', business.orderingBusinessId);
+    this.eventEmitter.emit(
+      'newOrder.notification',
+      business.orderingBusinessId,
+      formattedWoltOrder,
+    );
   }
 
   public async handleExistingWoltOrder(
