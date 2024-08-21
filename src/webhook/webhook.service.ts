@@ -64,7 +64,7 @@ export class WebhookService {
         );
       }
 
-      this.eventEmitter.emit('newOrder.notification', order.business_id.toString()), formattedOrder;
+      this.eventEmitter.emit('newOrder.notification', order.business_id.toString(), formattedOrder);
 
       return 'Order processed and notified successfully';
     } catch (error) {
