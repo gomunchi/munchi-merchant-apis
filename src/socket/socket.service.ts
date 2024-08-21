@@ -18,7 +18,6 @@ import { AcknowledgementType, BaseAcknowledgement, EmitOptions } from './dto';
     credentials: true,
   },
   transports: ['websocket', 'polling'],
-  allowEIO3: true,
   path: '/socket.io',
 })
 @Injectable()
@@ -44,7 +43,7 @@ export class SocketService implements OnModuleInit {
     });
   }
 
-  private handleSocketConnection(socket: any) {
+  private handleSocketConnection(socket: Socket) {
     socket.on('join', async (room: string | string[], callback?: (response: any) => void) => {
       await this.handleJoinRooms(socket, room, callback);
     });
