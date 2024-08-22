@@ -101,6 +101,7 @@ export class OneSignalService {
         order: {
           orderId: order.orderId,
           orderNumber: order.orderNumber,
+          businessId: order.business.publicId,
         },
       };
     }
