@@ -2,14 +2,14 @@ name: Build and Deploy to Google Cloud
 
 on:
   push:
-    branches: [ development ] # Trigger the workflow on push to main branch
+    branches: [ master ] # Trigger the workflow on push to main branch
 env:
   REGISTRY: ${{ secrets.GCP_REGISTRY }}
   REPOSITORY: ${{ secrets.GCP_REPOSITORY }}
   GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   IMAGE_NAME: munchi-merchant-api 
-  SERVICE_NAME: munchi-merchant-dev-api # If this is different from the image name
+  SERVICE_NAME: munchi-merchant-production-api # If this is different from the image name
   REGION: europe-north1 # Assuming this is your region, adjust if necessary
 
 jobs:
