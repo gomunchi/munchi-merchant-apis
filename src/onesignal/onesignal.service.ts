@@ -97,7 +97,13 @@ export class OneSignalService {
         this.logger.error('Invalid order object');
         throw new Error('Invalid order data');
       }
-      notification.data = { order };
+      notification.data = {
+        order: {
+          orderId: order.orderId,
+          orderNumber: order.orderNumber,
+          businessId: order.business.publicId,
+        },
+      };
     }
 
     try {
