@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -264,9 +265,19 @@ export class SessionService {
   }
 
   async updateAccessTime(sessionPublicId: string) {
-    await this.prismaService.session.update({
+    const session = await this.prismaService.session.findUnique({
       where: {
         publicId: sessionPublicId,
+      },
+    });
+
+    if (!session) {
+      throw new UnauthorizedException('No session found with this id');
+    }
+
+    await this.prismaService.session.update({
+      where: {
+        publicId: session.publicId,
       },
       data: {
         lastAccessTs: moment.utc().toDate(),
