@@ -97,6 +97,10 @@ export class WoltService implements ProviderService {
 
     const provider = await this.prismaService.provider.findUnique(providerInputArgs);
 
+    if (!provider) {
+      throw new BadRequestException(`No provider connected with this business`);
+    }
+
     if (apiType === 'order') {
       woltCredentials = provider.credentials.find(
         (credential) => credential.name === 'Order' && credential.type === 'api-key',
