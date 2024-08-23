@@ -1,13 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
-import { Business, Prisma } from '@prisma/client';
+import { ApiKey, Business, BusinessProviders, Prisma, Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import moment from 'moment-timezone';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -39,33 +37,199 @@ export class BusinessService {
     private readonly configService: ConfigService,
     private woltService: WoltService,
     private eventEmitter: EventEmitter2,
-    @Inject(forwardRef(() => OrderingService)) private orderingService: OrderingService,
+    private orderingService: OrderingService,
   ) {}
 
   @Cron(CronExpression.MONDAY_TO_FRIDAY_AT_6AM)
   async syncBusinessFromOrdering() {
-    const orderingApiKey = await this.prismaService.apiKey.findFirst({
-      where: {
-        name: 'ORDERING_API_KEY',
-      },
-    });
+    const orderingApiKey = await this.getOrCreateOrderingApiKey();
 
-    if (!orderingApiKey) {
-      const orderingApiKey = await this.configService.get('ORDERING_API_KEY');
-      this.apiKeyService.createApiKey('ORDERING_API_KEY', orderingApiKey);
-      this.syncBusinessFromOrdering();
-      return;
-    }
-
-    const orderingBusiness = await this.orderingService.getAllBusinessForAdmin(
-      orderingApiKey.value,
-    );
+    const orderingBusiness = await this.orderingService.getAllBusinessForAdmin(orderingApiKey);
 
     const formattedBusinessesData = plainToInstance(BusinessDto, orderingBusiness);
 
     await this.saveMultipleBusinessToDb(formattedBusinessesData);
 
     this.logger.log('Businesses synced');
+  }
+
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async checkOpeningHour() {
+    try {
+      const orderingApiKey = await this.getOrCreateOrderingApiKey();
+      const businessIdsToCheck = this.parseBusinessIdsToCheck();
+
+      if (businessIdsToCheck.length === 0) {
+        this.logger.log('No businesses to check for opening hour');
+        return;
+      }
+
+      const filteredBusinesses = await this.orderingService.getFilteredBusinesses(
+        '',
+        {
+          where: { id: businessIdsToCheck },
+          params: [
+            'id',
+            'name',
+            'business_id',
+            'customer_id',
+            'schedule',
+            'open',
+            'enabled',
+            'today',
+          ],
+        },
+        orderingApiKey,
+      );
+
+      await this.processBusinesses(filteredBusinesses, orderingApiKey);
+    } catch (error: any) {
+      this.logger.error(`Error in checkOpeningHour: ${error.message}`, error.stack);
+    }
+  }
+
+  private async getOrCreateOrderingApiKey(): Promise<string> {
+    const apiKeyName = 'ORDERING_API_KEY';
+    let apiKey: ApiKey | null = await this.prismaService.apiKey.findFirst({
+      where: { name: apiKeyName },
+    });
+
+    if (!apiKey) {
+      const apiKeyValue = this.configService.get<string>(apiKeyName);
+      if (!apiKeyValue) {
+        throw new Error(`${apiKeyName} is not set in the environment`);
+      }
+
+      try {
+        // Create the API key
+        await this.apiKeyService.createApiKey(apiKeyName, apiKeyValue);
+
+        // Fetch the newly created API key
+        apiKey = await this.prismaService.apiKey.findFirst({
+          where: { name: apiKeyName },
+        });
+
+        if (!apiKey) {
+          throw new Error('Failed to retrieve the newly created API key');
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to create or retrieve API key: ${error.message}`);
+        throw new Error(`Failed to create or retrieve API key: ${error.message}`);
+      }
+    }
+
+    return apiKey.value;
+  }
+
+  private parseBusinessIdsToCheck(): number[] {
+    const value = this.configService.get<string>('BUSINESS_TO_CHECK');
+    if (!value) {
+      this.logger.warn('Environment variable BUSINESS_TO_CHECK is not set');
+      return [];
+    }
+
+    try {
+      return value.split(',').map((num) => {
+        const parsed = parseInt(num.trim(), 10);
+        if (isNaN(parsed)) {
+          throw new Error(`Invalid number: ${num}`);
+        }
+        return parsed;
+      });
+    } catch (error: any) {
+      this.logger.error(`Error parsing BUSINESS_TO_CHECK: ${error.message}`);
+      return [];
+    }
+  }
+  private async processBusinesses(businesses: any[], apiKey: string): Promise<void> {
+    for (const business of businesses) {
+      this.logger.log(`Processing business: ${business.name} (ID: ${business.id})`);
+
+      if (!business.enabled) {
+        this.logger.log(`Business ${business.name} is not enabled. Skipping.`);
+        continue;
+      }
+
+      const { schedule, timezone } = business;
+      const currentMoment = moment().tz(timezone);
+      const numberOfToday = currentMoment.weekday();
+      const todaySchedule = schedule[numberOfToday];
+
+      const shouldBeOpen = this.isBusinessOpenNow(todaySchedule, currentMoment);
+      const needsUpdate = shouldBeOpen !== business.open;
+
+      if (needsUpdate) {
+        this.logger.log(
+          `Updating status for ${business.name} to ${shouldBeOpen ? 'open' : 'closed'}.`,
+        );
+        todaySchedule.enabled = shouldBeOpen;
+
+        try {
+          await this.updateBusinessStatus(business, schedule, shouldBeOpen, apiKey);
+          this.logger.log(`Status updated successfully for ${business.name}`);
+
+          await this.updateProviderStatuses(business.id, shouldBeOpen);
+        } catch (error: any) {
+          this.logger.error(
+            `Error updating status for ${business.name}: ${error.message}`,
+            error.stack,
+          );
+        }
+      } else {
+        this.logger.log(
+          `Business ${business.name} status is correct (${
+            business.open ? 'open' : 'closed'
+          }). No action needed.`,
+        );
+      }
+    }
+  }
+
+  private async updateBusinessStatus(
+    business: any,
+    schedule: any,
+    shouldBeOpen: boolean,
+    apiKey: string,
+  ): Promise<void> {
+    await this.orderingService.editBusiness(
+      '',
+      business.id,
+      {
+        schedule: JSON.stringify(schedule),
+        open: shouldBeOpen,
+      },
+      apiKey,
+    );
+  }
+
+  private async updateProviderStatuses(businessId: number, isOpen: boolean): Promise<void> {
+    const businessProviders = await this.getBusinessProviders(businessId);
+    for (const provider of businessProviders) {
+      this.eventEmitter.emit(`${provider.provider.name}.venueStatus`, provider.providerId, isOpen);
+    }
+  }
+
+  private isBusinessOpenNow(todaySchedule: any, currentMoment: moment.Moment): boolean {
+    if (todaySchedule.lapses.length === 0) {
+      return false;
+    }
+
+    const currentMinutes = currentMoment.hours() * 60 + currentMoment.minutes();
+
+    for (const lapse of todaySchedule.lapses) {
+      const openMinutes = lapse.open.hour * 60 + lapse.open.minute;
+      let closeMinutes = lapse.close.hour * 60 + lapse.close.minute;
+
+      if (closeMinutes <= openMinutes) {
+        closeMinutes += 24 * 60; // Add 24 hours for overnight schedules
+      }
+
+      if (currentMinutes >= openMinutes && currentMinutes < closeMinutes) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   async getAllBusiness(page: number, rowPerPage: number) {
@@ -203,6 +367,18 @@ export class BusinessService {
     return businessDtos;
   }
 
+  private async getBusinessProviders(businessId: number): Promise<
+    (BusinessProviders & {
+      provider: Provider;
+    })[]
+  > {
+    const businessProviders = await this.prismaService.businessProviders.findMany({
+      where: { orderingBusinessId: businessId.toString() },
+      include: { provider: true },
+    });
+    return businessProviders;
+  }
+
   async getOrderingBusiness(orderingUserId: number, publicBusinessId: string) {
     const accessToken = await this.utils.getOrderingAccessToken(orderingUserId);
     const business = await this.findBusinessByPublicId(publicBusinessId);
@@ -295,12 +471,16 @@ export class BusinessService {
       response.today = response.schedule[numberOfToday];
 
       return plainToInstance(BusinessDto, response);
-    } else if (provider === ProviderEnum.Wolt) {
-      const providerData = businessProvider.filter(
+    } else {
+      const providerData = businessProvider.find(
         (businessProvider) => businessProvider.provider.name === provider,
       );
 
-      const { provider: providerInfo } = providerData[0];
+      if (!providerData) {
+        throw new BadRequestException('No provider data found');
+      }
+
+      const { provider: providerInfo } = providerData;
 
       const localBusiness = await this.findBusinessByPublicId(businessPublicId);
       if (!orderingBusiness || !localBusiness) {
@@ -317,8 +497,10 @@ export class BusinessService {
       });
       console.log('🚀 ~ BusinessService ~ scheduleOpenTime line 320:', scheduleOpenTime);
 
-      // //send request to wolt venue
-      await this.woltService.setWoltVenueStatus(
+      //send request to provider venue
+
+      this.eventEmitter.emit(
+        `${provider}.venueStatus`,
         providerInfo.id,
         status,
         !status ? scheduleOpenTime : null,
