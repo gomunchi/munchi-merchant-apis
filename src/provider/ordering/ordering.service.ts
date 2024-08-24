@@ -383,7 +383,11 @@ export class OrderingService implements ProviderService {
         this.eventEmitter.emit('zapier.trigger', response.data.result);
       }
 
-      return response.data.result;
+      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
+        response.data.result,
+      );
+
+      return formattedOrder;
     } catch (error) {
       this.utilService.logError(error);
     }
