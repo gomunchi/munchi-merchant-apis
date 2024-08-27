@@ -4,7 +4,9 @@ import { OptionDto } from './option.dto';
 @Exclude()
 export class ProductDto {
   @Expose({ name: 'product_id' })
-  @Transform(({ value }) => value.toString())
+  @Transform(({ value }) => {
+    return !value ? `generated-${Math.random().toString(36).substr(2, 9)}` : value.toString();
+  })
   id: string;
 
   @Expose()
@@ -14,7 +16,9 @@ export class ProductDto {
   quantity: number;
 
   @Expose({ name: 'price' })
-  @Transform(({ value }) => value.toString())
+  @Transform(({ value }) => {
+    return value.toString();
+  })
   price: string;
 
   @Expose()
