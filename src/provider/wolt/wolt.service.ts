@@ -38,7 +38,7 @@ import {
   OrderingMenuCategory,
 } from '../ordering/dto/ordering-menu.dto';
 
-import { MenuItemBodyData } from './wolt.type';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class WoltService implements ProviderService {
@@ -86,6 +86,8 @@ export class WoltService implements ProviderService {
       data: unknown;
     }; // API Keys are typically strings
 
+    this.logger.debug(`Getting Wolt credentials - Venue ID: ${woltVenueId}, Type: ${apiType}`);
+
     const providerInputArgs = Prisma.validator<Prisma.ProviderFindUniqueArgs>()({
       where: {
         id: woltVenueId,
@@ -96,6 +98,10 @@ export class WoltService implements ProviderService {
     });
 
     const provider = await this.prismaService.provider.findUnique(providerInputArgs);
+
+    if (!provider) {
+      throw new BadRequestException(`No provider connected with this business`);
+    }
 
     if (apiType === 'order') {
       woltCredentials = provider.credentials.find(
@@ -377,27 +383,44 @@ export class WoltService implements ProviderService {
     }
   }
 
+  @OnEvent('Wolt.venueStatus')
   async setWoltVenueStatus(woltVenueId: string, status: boolean, time?: Date) {
-    const woltCredentials = await this.getWoltCredentials(woltVenueId, 'order');
-
-    const option = {
-      method: 'PATCH',
-      baseURL: `${this.woltApiUrl}/venues/${woltVenueId}/online`,
-      headers: {
-        'WOLT-API-KEY': woltCredentials.value,
-      },
-      data: {
-        status: status ? 'ONLINE' : 'OFFLINE',
-        until: time ? time : null,
-      },
-    };
+    this.logger.log(
+      `Setting Wolt venue status - Venue ID: ${woltVenueId}, Status: ${status}, Time: ${
+        time || 'N/A'
+      }`,
+    );
 
     try {
+      const woltCredentials = await this.getWoltCredentials(woltVenueId, 'order');
+      this.logger.debug(`Retrieved Wolt credentials for venue ID: ${woltVenueId}`);
+
+      const woltApiUrl = this.configService.get<string>('WOLT_API_URL');
+      const option = {
+        method: 'PATCH',
+        baseURL: `${woltApiUrl}/venues/${woltVenueId}/online`,
+        headers: {
+          'WOLT-API-KEY': woltCredentials.value,
+        },
+        data: {
+          status: status ? 'ONLINE' : 'OFFLINE',
+          until: time ? time : null,
+        },
+      };
+
+      this.logger.debug(`Sending request to Wolt API - URL: ${option.baseURL}`);
       const response = await axios.request(option);
 
+      this.logger.log(
+        `Successfully updated Wolt venue status - Venue ID: ${woltVenueId}, Status: ${status}`,
+      );
       return response.data;
     } catch (error: any) {
-      throw new ForbiddenException(error);
+      this.logger.error(
+        `Error setting Wolt venue status - Venue ID: ${woltVenueId}, Error: ${error.message}`,
+        error.stack,
+      );
+      throw new ForbiddenException(`Failed to set Wolt venue status: ${error.message}`);
     }
   }
 

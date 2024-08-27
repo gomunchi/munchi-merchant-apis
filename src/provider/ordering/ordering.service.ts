@@ -19,7 +19,12 @@ import { OrderingOrder } from './dto/ordering-order.dto';
 import { OrderingMenuMapperService } from './ordering-menu-mapper';
 import { OrderingOrderMapperService } from './ordering-order-mapper';
 import { OrderingSyncService } from './ordering-sync';
-import { OrderingDeliveryType, OrderingOrderStatus, OrderingUser } from './ordering.type';
+import {
+  BusinessFilters,
+  OrderingDeliveryType,
+  OrderingOrderStatus,
+  OrderingUser,
+} from './ordering.type';
 
 @Injectable()
 export class OrderingService implements ProviderService {
@@ -205,6 +210,41 @@ export class OrderingService implements ProviderService {
     }
   }
 
+  async getFilteredBusinesses(accessToken: string, filters: BusinessFilters, apiKey?: string) {
+    const baseUrl = this.utilService.getEnvUrl('business');
+    let url = `${baseUrl}?mode=dashboard`;
+
+    if (filters.where) {
+      // Use JSON.stringify without URL encoding
+      url += `&where=${JSON.stringify(filters.where)}`;
+    }
+
+    if (filters.params) {
+      url += `&params=${filters.params.join(',')}`;
+    }
+
+    const options = {
+      method: 'GET',
+      url,
+      headers: {
+        accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
+
+    try {
+      const response = await axios.request(options);
+      return response.data.result;
+    } catch (error) {
+      this.utilService.logError(error);
+      throw error;
+    }
+  }
+
   async getBusinessById(accessToken: string, businessId: string) {
     const options = {
       method: 'GET',
@@ -223,7 +263,12 @@ export class OrderingService implements ProviderService {
     }
   }
 
-  async editBusiness(accessToken: string, businessId: number, data: object): Promise<Business> {
+  async editBusiness(
+    accessToken: string,
+    businessId: number,
+    data: object,
+    apiKey?: string,
+  ): Promise<Business> {
     const options = {
       method: 'POST',
       url: `${this.utilService.getEnvUrl('business', businessId)}`,
@@ -233,6 +278,10 @@ export class OrderingService implements ProviderService {
         Authorization: `Bearer ${accessToken}`,
       },
     };
+
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
 
     this.logger.warn('edit business', options.url, data);
 
@@ -334,7 +383,11 @@ export class OrderingService implements ProviderService {
         this.eventEmitter.emit('zapier.trigger', response.data.result);
       }
 
-      return response.data.result;
+      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
+        response.data.result,
+      );
+
+      return formattedOrder;
     } catch (error) {
       this.utilService.logError(error);
     }

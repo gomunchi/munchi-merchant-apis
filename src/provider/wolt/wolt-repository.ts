@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { OrderResponse } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -152,9 +152,15 @@ export class WoltRepositoryService {
   }
 
   public async getOrderByIdFromDb(woltOrderId: string) {
+    // Validate that woltOrderId is a valid integer
+    const parsedId = Number(woltOrderId);
+    if (!Number.isInteger(parsedId)) {
+      throw new BadRequestException('Invalid order ID: must be an integer');
+    }
+
     const order = await this.prismaService.order.findUnique({
       where: {
-        id: parseInt(woltOrderId),
+        id: parsedId,
       },
       include: WoltOrderPrismaSelectArgs,
     });
@@ -162,7 +168,6 @@ export class WoltRepositoryService {
     if (!order) {
       return null;
     }
-    // const syncOrder = await this.syncWoltOrder(order.orderId);
 
     return order;
   }

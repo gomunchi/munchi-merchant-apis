@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder } from '@nestjs/swagger';
 import { SwaggerDocumentOptions, SwaggerModule } from '@nestjs/swagger/dist';
@@ -57,6 +57,11 @@ async function bootstrap() {
 
   app.enableCors({
     credentials: true,
+  });
+
+  app.enableVersioning({
+    type: VersioningType.HEADER,
+    header: 'Accept-Version',
   });
 
   app.useGlobalPipes(
