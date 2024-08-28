@@ -391,14 +391,18 @@ export class MenuService {
     });
 
     menuQueue.forEach(async (queue) => {
-      await this.prismaService.menuTracking.update({
-        where: {
-          businessPublicId: queue.businessPublicId,
-        },
-        data: {
-          processing: true,
-        },
-      });
+      const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
+
+      if (business.provider.length > 0) {
+        await this.prismaService.menuTracking.update({
+          where: {
+            businessPublicId: queue.businessPublicId,
+          },
+          data: {
+            processing: true,
+          },
+        });
+      }
     });
   }
 
@@ -419,7 +423,7 @@ export class MenuService {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
       this.logger.log(`${queue.name}`);
 
-      if (calculatedTime === 0) {
+      if (calculatedTime <= 0) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);
