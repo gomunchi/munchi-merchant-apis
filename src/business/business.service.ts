@@ -1,13 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
-import { Business, Prisma } from '@prisma/client';
+import { ApiKey, Business, BusinessProviders, Prisma, Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import moment from 'moment-timezone';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -39,33 +37,53 @@ export class BusinessService {
     private readonly configService: ConfigService,
     private woltService: WoltService,
     private eventEmitter: EventEmitter2,
-    @Inject(forwardRef(() => OrderingService)) private orderingService: OrderingService,
+    private orderingService: OrderingService,
   ) {}
 
   @Cron(CronExpression.MONDAY_TO_FRIDAY_AT_6AM)
   async syncBusinessFromOrdering() {
-    const orderingApiKey = await this.prismaService.apiKey.findFirst({
-      where: {
-        name: 'ORDERING_API_KEY',
-      },
-    });
+    const orderingApiKey = await this.getOrCreateOrderingApiKey();
 
-    if (!orderingApiKey) {
-      const orderingApiKey = await this.configService.get('ORDERING_API_KEY');
-      this.apiKeyService.createApiKey('ORDERING_API_KEY', orderingApiKey);
-      this.syncBusinessFromOrdering();
-      return;
-    }
-
-    const orderingBusiness = await this.orderingService.getAllBusinessForAdmin(
-      orderingApiKey.value,
-    );
+    const orderingBusiness = await this.orderingService.getAllBusinessForAdmin(orderingApiKey);
 
     const formattedBusinessesData = plainToInstance(BusinessDto, orderingBusiness);
 
     await this.saveMultipleBusinessToDb(formattedBusinessesData);
 
     this.logger.log('Businesses synced');
+  }
+
+  private async getOrCreateOrderingApiKey(): Promise<string> {
+    const apiKeyName = 'ORDERING_API_KEY';
+    let apiKey: ApiKey | null = await this.prismaService.apiKey.findFirst({
+      where: { name: apiKeyName },
+    });
+
+    if (!apiKey) {
+      const apiKeyValue = this.configService.get<string>(apiKeyName);
+      if (!apiKeyValue) {
+        throw new Error(`${apiKeyName} is not set in the environment`);
+      }
+
+      try {
+        // Create the API key
+        await this.apiKeyService.createApiKey(apiKeyName, apiKeyValue);
+
+        // Fetch the newly created API key
+        apiKey = await this.prismaService.apiKey.findFirst({
+          where: { name: apiKeyName },
+        });
+
+        if (!apiKey) {
+          throw new Error('Failed to retrieve the newly created API key');
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to create or retrieve API key: ${error.message}`);
+        throw new Error(`Failed to create or retrieve API key: ${error.message}`);
+      }
+    }
+
+    return apiKey.value;
   }
 
   async getAllBusiness(page: number, rowPerPage: number) {
@@ -203,6 +221,18 @@ export class BusinessService {
     return businessDtos;
   }
 
+  private async getBusinessProviders(businessId: number): Promise<
+    (BusinessProviders & {
+      provider: Provider;
+    })[]
+  > {
+    const businessProviders = await this.prismaService.businessProviders.findMany({
+      where: { orderingBusinessId: businessId.toString() },
+      include: { provider: true },
+    });
+    return businessProviders;
+  }
+
   async getOrderingBusiness(orderingUserId: number, publicBusinessId: string) {
     const accessToken = await this.utils.getOrderingAccessToken(orderingUserId);
     const business = await this.findBusinessByPublicId(publicBusinessId);
@@ -295,12 +325,16 @@ export class BusinessService {
       response.today = response.schedule[numberOfToday];
 
       return plainToInstance(BusinessDto, response);
-    } else if (provider === ProviderEnum.Wolt) {
-      const providerData = businessProvider.filter(
+    } else {
+      const providerData = businessProvider.find(
         (businessProvider) => businessProvider.provider.name === provider,
       );
 
-      const { provider: providerInfo } = providerData[0];
+      if (!providerData) {
+        throw new BadRequestException('No provider data found');
+      }
+
+      const { provider: providerInfo } = providerData;
 
       const localBusiness = await this.findBusinessByPublicId(businessPublicId);
       if (!orderingBusiness || !localBusiness) {
@@ -317,8 +351,10 @@ export class BusinessService {
       });
       console.log('🚀 ~ BusinessService ~ scheduleOpenTime line 320:', scheduleOpenTime);
 
-      // //send request to wolt venue
-      await this.woltService.setWoltVenueStatus(
+      //send request to provider venue
+
+      this.eventEmitter.emit(
+        `${provider}.venueStatus`,
         providerInfo.id,
         status,
         !status ? scheduleOpenTime : null,
