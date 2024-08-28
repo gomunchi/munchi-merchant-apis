@@ -5,6 +5,8 @@ import { WoltOrderV2 } from './dto/wolt-order-v2.dto';
 import { WoltOrderNotification } from './dto/wolt-order.dto';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltService } from './wolt.service';
+import { OrderResponse } from 'src/order/dto/order.dto';
+import { WoltWebhookOrderStatus } from './wolt.type';
 
 @Injectable()
 export class WoltWebhookService {
@@ -33,7 +35,8 @@ export class WoltWebhookService {
 
   public isNewOrder(woltWebhookdata: WoltOrderNotification): boolean {
     return (
-      woltWebhookdata.order.status === 'CREATED' && woltWebhookdata.type === 'order.notification'
+      woltWebhookdata.order.status === WoltWebhookOrderStatus.Created &&
+      woltWebhookdata.type === 'order.notification'
     );
   }
 
@@ -66,14 +69,18 @@ export class WoltWebhookService {
 
   public async handleExistingWoltOrder(
     woltWebhookdata: WoltOrderNotification,
-    formattedWoltOrder: any,
+    formattedWoltOrder: OrderResponse,
     woltCredentials: any,
     business: any,
   ): Promise<void> {
     await this.woltService.syncWoltOrder(woltCredentials, woltWebhookdata.order.id);
 
-    if (woltWebhookdata.order.status === 'DELIVERED') {
+    if (woltWebhookdata.order.status === WoltWebhookOrderStatus.Delivered) {
       this.logger.log(`Delivered order details: ${JSON.stringify(formattedWoltOrder)}`);
+    }
+
+    if (woltWebhookdata.order.status === WoltWebhookOrderStatus.Canceled) {
+      this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
     }
 
     const ackResult = await this.socketService.emitWithAcknowledgement({
