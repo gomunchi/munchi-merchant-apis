@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SocketService } from 'src/socket/socket.service';
 import { WoltOrderV2 } from './dto/wolt-order-v2.dto';
-import { WoltOrderNotification } from './dto/wolt-order.dto';
+import { WoltOrderNotification, WoltOrderType } from './dto/wolt-order.dto';
 import { WoltRepositoryService } from './wolt-repository';
 import { WoltService } from './wolt.service';
 import { OrderResponse } from 'src/order/dto/order.dto';
@@ -79,7 +79,10 @@ export class WoltWebhookService {
       this.logger.log(`Delivered order details: ${JSON.stringify(formattedWoltOrder)}`);
     }
 
-    if (woltWebhookdata.order.status === WoltWebhookOrderStatus.Canceled) {
+    if (
+      woltWebhookdata.order.status === WoltWebhookOrderStatus.Canceled &&
+      formattedWoltOrder.type === WoltOrderType.PreOrder
+    ) {
       this.eventEmitter.emit('preorderQueue.validate', formattedWoltOrder.orderId);
     }
 
