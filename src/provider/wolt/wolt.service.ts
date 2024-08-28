@@ -151,33 +151,56 @@ export class WoltService implements ProviderService {
     woltApiKey: string,
     updateData?: Omit<OrderData, 'provider'>,
   ) {
+    this.logger.log(
+      `Preparing to send Wolt update request for order ${woltOrderId} to endpoint: ${endpoint}`,
+    );
+
+    const baseURL = `${this.woltApiUrl}/orders/${woltOrderId}/${endpoint}`;
+    this.logger.log(`Request URL: ${baseURL}`);
+
+    let requestData = null;
+    if (endpoint === 'reject') {
+      requestData = {
+        reason:
+          updateData.reason ||
+          'Your order has been rejected, please contact the restaurant for more info',
+      };
+    } else if (endpoint === 'accept' && orderType === WoltOrderType.Instant) {
+      requestData = {
+        adjusted_pickup_time: updateData.preparedIn,
+      };
+    }
+
+    this.logger.log(`Request data: ${JSON.stringify(requestData)}`);
+
     const option = {
       method: 'PUT',
-      baseURL: `${this.woltApiUrl}/orders/${woltOrderId}/${endpoint}`,
+      baseURL,
       headers: {
         'WOLT-API-KEY': woltApiKey,
       },
-      data:
-        endpoint === 'reject'
-          ? {
-              reason: updateData.reason
-                ? updateData.reason
-                : 'Your order has been rejected, please contact the restaurant for more info',
-            }
-          : endpoint === 'accept' && orderType === WoltOrderType.Instant
-          ? {
-              adjusted_pickup_time: updateData.preparedIn,
-            }
-          : null,
+      data: requestData,
     };
+
     try {
+      this.logger.log(`Sending request to Wolt API for order ${woltOrderId}`);
       const response = await axios.request(option);
+      this.logger.log(
+        `Wolt API request successful for order ${woltOrderId}. Status: ${response.status}`,
+      );
+      this.logger.debug(`Response data: ${JSON.stringify(response.data)}`);
       return response.data;
     } catch (error: any) {
-      this.logger.log(
-        `Error when updating wolt Order with order id:${woltOrderId}. Error: ${error}`,
+      this.logger.error(
+        `Error when updating Wolt Order ${woltOrderId}. Status: ${error.response?.status}. Message: ${error.message}`,
+        error.stack,
       );
 
+      if (error.response) {
+        this.logger.error(`Error response data: ${JSON.stringify(error.response.data)}`);
+      }
+
+      this.logger.log(`Attempting to sync Wolt order ${woltOrderId} after update failure`);
       await this.syncWoltOrder(woltApiKey, woltOrderId);
       throw new ForbiddenException(error);
     }
@@ -201,20 +224,25 @@ export class WoltService implements ProviderService {
     { orderStatus, preparedIn }: Omit<OrderData, 'provider'>,
     providerInfo: Provider,
   ): Promise<any> {
+    this.logger.log(
+      `Updating order: ${woltOrderId}, Status: ${orderStatus}, PreparedIn: ${preparedIn}`,
+    );
+
     const venueId = providerInfo.id;
-
-    // Get wolt api key from database
     const woltCredentials = await this.getWoltCredentials(venueId, 'order');
-
     const order = await this.woltRepositoryService.getOrderByIdFromDb(woltOrderId);
+
+    this.logger.log(`Current order status: ${order.status}`);
 
     const updateEndPoint = this.generateWoltUpdateEndPoint(orderStatus, order as any);
 
     if (order.status === OrderStatusEnum.DELIVERED) {
+      this.logger.log(`Order ${woltOrderId} is already delivered. No update needed.`);
       return;
     }
 
     if (orderStatus === OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER) {
+      this.logger.log(`Order ${woltOrderId} picked up by driver. Updating and returning.`);
       return this.updateAndReturn(order, null, orderStatus);
     }
 
@@ -222,6 +250,8 @@ export class WoltService implements ProviderService {
       const adjustedPickupTime = preparedIn
         ? moment(order.createdAt).add(preparedIn, 'minutes').format()
         : order.pickupEta;
+
+      this.logger.log(`Sending Wolt update request for order ${woltOrderId}`);
 
       await this.sendWoltUpdateRequest(
         order.orderId,
@@ -238,32 +268,15 @@ export class WoltService implements ProviderService {
         order.deliveryType === OrderingDeliveryType.Delivery &&
         order.status === OrderStatusEnum.PENDING
       ) {
-        const maxRetries = 10;
-        const retryInterval = 500;
-        const syncPickUpTime = await this.getOrderById(woltCredentials.value, order.orderId);
-        const formattedSyncOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(
-          syncPickUpTime,
-        );
-
-        const woltOrderMoment = moment(formattedSyncOrder.pickupEta);
-        const formattedSyncOrderMoment = moment(order.pickupEta);
-        let hasPickupTimeUpdated = false;
-        for (let i = 0; i < maxRetries; i++) {
-          if (!woltOrderMoment.isSame(formattedSyncOrderMoment, 'millisecond')) {
-            hasPickupTimeUpdated = true;
-          } else {
-            await new Promise((resolve) => setTimeout(resolve, retryInterval));
-          }
-        }
-
-        if (hasPickupTimeUpdated) {
-          await this.syncWoltOrder(woltCredentials.value, order.orderId);
-        }
+        this.logger.log(`Syncing pickup time for delivery order ${woltOrderId}`);
+        const syncResult = await this.syncPickupTime(woltCredentials.value, order);
+        this.logger.log(`Pickup time sync result for order ${woltOrderId}: ${syncResult}`);
       }
 
+      this.logger.log(`Finalizing update for order ${woltOrderId}`);
       return this.updateAndReturn(order, preparedIn, orderStatus);
-    } catch (error) {
-      this.logger.log(`Error when updating order: ${error}`);
+    } catch (error: any) {
+      this.logger.error(`Error when updating order ${woltOrderId}: ${error.message}`, error.stack);
       throw new ForbiddenException(error);
     }
   }
@@ -273,7 +286,11 @@ export class WoltService implements ProviderService {
     preparedIn: string | null,
     orderStatus: AvailableOrderStatus,
   ): Promise<any> {
+    this.logger.log(`Updating order in database: ${order.orderId}, Status: ${orderStatus}`);
     const updatedOrder = await this.updateOrderInDatabase(order, preparedIn, orderStatus);
+    this.logger.log(
+      `Order updated successfully: ${order.orderId}, New Status: ${updatedOrder.status}`,
+    );
     return updatedOrder;
   }
 
@@ -282,6 +299,9 @@ export class WoltService implements ProviderService {
     preparedIn?: string,
     orderStatus?: AvailableOrderStatus,
   ): Promise<any> {
+    this.logger.log(
+      `Updating order in database: ${order.orderId}, PreparedIn: ${preparedIn}, Status: ${orderStatus}`,
+    );
     const updatedOrder = await this.prismaService.order.update({
       where: {
         orderId: order.orderId,
@@ -301,8 +321,37 @@ export class WoltService implements ProviderService {
       },
       include: WoltOrderPrismaSelectArgs,
     });
-
+    this.logger.log(
+      `Order updated in database: ${order.orderId}, New Status: ${updatedOrder.status}`,
+    );
     return updatedOrder;
+  }
+
+  private async syncPickupTime(woltCredentialsValue: string, order: any): Promise<string> {
+    const maxRetries = 10;
+    const retryInterval = 500;
+    const syncPickUpTime = await this.getOrderById(woltCredentialsValue, order.orderId);
+    const formattedSyncOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(
+      syncPickUpTime,
+    );
+
+    const woltOrderMoment = moment(formattedSyncOrder.pickupEta);
+    const formattedSyncOrderMoment = moment(order.pickupEta);
+    let hasPickupTimeUpdated = false;
+    for (let i = 0; i < maxRetries; i++) {
+      if (!woltOrderMoment.isSame(formattedSyncOrderMoment, 'millisecond')) {
+        hasPickupTimeUpdated = true;
+        break;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, retryInterval));
+      }
+    }
+
+    if (hasPickupTimeUpdated) {
+      await this.syncWoltOrder(woltCredentialsValue, order.orderId);
+      return 'Pickup time updated and synced';
+    }
+    return 'Pickup time unchanged';
   }
 
   public async rejectOrder(
