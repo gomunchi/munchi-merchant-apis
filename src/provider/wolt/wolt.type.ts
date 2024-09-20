@@ -3,6 +3,13 @@ export enum WoltLanguageCode {
   Finnist = 'fi',
 }
 
+export enum WoltWebhookOrderStatus {
+  Created = 'CREATED',
+  Production = 'PRODUCTION',
+  Delivered = 'DELIVERED',
+  Canceled = 'CANCELED',
+}
+
 export interface ItemData {
   external_id: string;
   gtin?: string;
