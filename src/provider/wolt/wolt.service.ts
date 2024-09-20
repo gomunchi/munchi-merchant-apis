@@ -238,7 +238,7 @@ export class WoltService implements ProviderService {
         order.deliveryType === OrderingDeliveryType.Delivery &&
         order.status === OrderStatusEnum.PENDING
       ) {
-        const maxRetries = 10;
+        const maxRetries = 3;
         const retryInterval = 500;
         const syncPickUpTime = await this.getOrderById(woltCredentials.value, order.orderId);
         const formattedSyncOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(
