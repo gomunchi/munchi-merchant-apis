@@ -19,11 +19,16 @@ import { ProviderEnum, ProviderOrder } from '../provider.type';
 import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
 import { OrderingOrder } from '../ordering/dto/ordering-order.dto';
-import { FoodoraOrderResponse } from './dto/foodora-order-response.dto';
+import { FoodoraOrder } from './dto/foodora-order-response.dto';
 import { CatalogImportDto } from './dto/foodora-menu.dto';
 import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora-order.dto';
-import { AvailabilityStatusResponse, CloseRestaurantDto, OpenRestaurantDto } from './dto/foodora-restaurant-availability.dto';
+import {
+  AvailabilityStatusResponse,
+  CloseRestaurantDto,
+  OpenRestaurantDto,
+} from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
+import { FoodoraOrderMapperService } from './foodora-order-mapper';
 
 @Injectable()
 export class FoodoraService implements ProviderService {
@@ -34,10 +39,11 @@ export class FoodoraService implements ProviderService {
   private foodoraSecret: string;
 
   constructor(
-    private configService: ConfigService,
-    private prismaService: PrismaService,
-    private utilsService: UtilsService,
-    private orderingMenuMapperService: OrderingMenuMapperService,
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
+    private readonly utilsService: UtilsService,
+    private readonly orderingMenuMapperService: OrderingMenuMapperService,
+    private readonly foodoraOrderMapperService: FoodoraOrderMapperService,
   ) {
     this.foodoraApiUrl = this.configService.get('FOODORA_API_URL');
     this.foodoraUsername = this.configService.get('FOODORA_AUTH_USERNAME');
@@ -242,7 +248,7 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async getOrderDetails(chainCode: string, orderId: string): Promise<FoodoraOrderResponse> {
+  async getOrderDetails(chainCode: string, orderId: string): Promise<FoodoraOrder> {
     const accessToken = await this.foodoraLogin();
 
     try {
@@ -306,15 +312,11 @@ export class FoodoraService implements ProviderService {
     const orders = await Promise.all(
       orderIds.map(async (orderId) => {
         const order = await this.getOrderDetails('munchi', orderId);
-        // TODO - implement get order for specific business
-        // TODO - map to OrderingOrder or OrderResponse
-
-        // return this.orderingMenuMapperService.mapFoodoraOrderToOrderResponse(order);
-        return {} as OrderResponse;
+        return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
       }),
     );
 
-    return orders as unknown as OrderResponse[];
+    return orders;
   }
 
   async updateOrder(
@@ -344,8 +346,8 @@ export class FoodoraService implements ProviderService {
       await this.rejectOrder(orderingUserId, orderId, { reason: 'Order rejected' }, providerInfo);
     }
 
-    // TODO - map to OrderingOrder or OrderResponse
-    return this.getOrderDetails('munchi', orderId) as unknown as OrderingOrder;
+    const order = await this.getOrderDetails('munchi', orderId);
+    return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
   async rejectOrder(
@@ -359,7 +361,7 @@ export class FoodoraService implements ProviderService {
       reason: orderRejectData.reason,
     });
 
-    // TODO - get order details and map to OrderingOrder or OrderResponse
-    return this.getOrderDetails('munchi', orderId) as unknown as OrderingOrder;
+    const order = await this.getOrderDetails('munchi', orderId);
+    return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 }

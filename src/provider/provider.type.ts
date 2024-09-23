@@ -1,4 +1,4 @@
-import { FoodoraOrderResponse } from './foodora/dto/foodora-order-response.dto';
+import { FoodoraOrder } from './foodora/dto/foodora-order-response.dto';
 import { OrderingOrder } from './ordering/dto/ordering-order.dto';
 import { WoltOrderV2 } from './wolt/dto/wolt-order-v2.dto';
 import { WoltOrder } from './wolt/dto/wolt-order.dto';
@@ -24,4 +24,4 @@ export enum ProviderEnum {
 
 export type AvailableProvider = ProviderEnum.Wolt | ProviderEnum.Munchi | ProviderEnum.Foodora;
 
-export type ProviderOrder = OrderingOrder | WoltOrder | WoltOrderV2 | FoodoraOrderResponse;
+export type ProviderOrder = OrderingOrder | WoltOrder | WoltOrderV2 | FoodoraOrder;

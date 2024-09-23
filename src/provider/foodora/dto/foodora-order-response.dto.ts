@@ -1,4 +1,4 @@
-export interface FoodoraOrderResponse {
+export interface FoodoraOrder{
   order: {
     token?: string;
     code?: string;
