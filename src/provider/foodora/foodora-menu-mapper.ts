@@ -145,7 +145,12 @@ export class OrderingMenuMapperService {
           default: menu.name,
         },
         menuType: MenuType.DELIVERY,
-        products: {},
+        products: {
+          [menuId]: {
+            id: menuId,
+            type: 'Product',
+          },
+        },
         schedule: {
           [menuId]: {
             id: menuId,
@@ -173,11 +178,6 @@ export class OrderingMenuMapperService {
         },
         active: menu.enabled,
         price: '0',
-        // other product properties (e.g. image, variants, toppings)
-      };
-      catalog.items[menuId].products[menuId] = {
-        id: menuId,
-        type: 'Product',
       };
     });
 

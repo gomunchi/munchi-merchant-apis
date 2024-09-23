@@ -9,6 +9,7 @@ import { WoltOrderMapperService } from './wolt/wolt-order-mapper';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltSyncService } from './wolt/wolt-sync';
 import { WoltService } from './wolt/wolt.service';
+import { FoodoraService } from './foodora/foodora.service';
 import { OrderingMenuMapperService } from './ordering/ordering-menu-mapper';
 import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
 import { WoltWebhookService } from './wolt/wolt-webhook';
@@ -29,6 +30,8 @@ import { WoltWebhookService } from './wolt/wolt-webhook';
     WoltMenuMapperService,
     WoltSyncService,
     WoltWebhookService,
+    // Foodora Services
+    FoodoraService,
     {
       provide: `${ProviderEnum.Munchi}Service`,
       useClass: OrderingService,

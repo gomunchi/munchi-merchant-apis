@@ -16,12 +16,14 @@ import { OrderingOrder } from './ordering/dto/ordering-order.dto';
 import { AvailableProvider, ProviderEnum } from './provider.type';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
+import { FoodoraService } from './foodora/foodora.service';
 
 @Injectable()
 export class ProviderManagmentService {
   constructor(
     private moduleRef: ModuleRef,
     private woltService: WoltService,
+    private foodoraService: FoodoraService,
     private woltRepositoryService: WoltRepositoryService,
     private utilService: UtilsService,
     private orderingService: OrderingService,
@@ -54,13 +56,13 @@ export class ProviderManagmentService {
       }),
     );
 
+    const orderBy = Prisma.validator<Prisma.OrderOrderByWithRelationInput>()({
+      id: 'asc',
+    });
+
     // TODO: Map provider enum to an array then use that array to map to get order from the database. Filter out "Munchi" first as it is not stored in our database
     //If wolt provider included in the body data
     if (provider.includes(ProviderEnum.Wolt)) {
-      const orderBy = Prisma.validator<Prisma.OrderOrderByWithRelationInput>()({
-        id: 'asc',
-      });
-
       const woltOrders = await this.woltService.getOrderByStatus(
         orderingToken,
         status,
@@ -76,6 +78,14 @@ export class ProviderManagmentService {
       });
 
       return sortedOrders;
+    }
+
+    if (provider.includes(ProviderEnum.Foodora)) {
+      const foodoraOrders = await this.foodoraService.getOrderByStatus(
+        orderingToken,
+        status,
+        businessOrderingIds,
+      );
     }
 
     return formattedOrderingOrders;
