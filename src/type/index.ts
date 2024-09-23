@@ -30,7 +30,7 @@ export type FilterQuery = {
 
 export interface OrderData {
   provider: AvailableProvider;
-  preparedIn: string;
+  preparedIn?: string;
   orderStatus: AvailableOrderStatus;
   reason?: string;
 }

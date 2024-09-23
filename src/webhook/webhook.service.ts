@@ -152,4 +152,11 @@ export class WebhookService {
   async notifyCheckBusinessStatus(businessPublicId: string) {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
+
+  async foodoraOrderNotification(foodoraWebhookdata: any, request: any): Promise<string> {
+    this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
+    this.logger.log(`Received Foodora request: ${JSON.stringify(request)}`);
+
+    return 'Its just a dummy response for testing purpose';
+  }
 }
