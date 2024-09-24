@@ -1,39 +1,36 @@
-export interface FoodoraOrder{
-  order: {
-    token?: string;
-    code?: string;
-    comments?: {
-      customerComment?: string;
-      vendorComment?: string;
-    };
-    createdAt?: string;
-    customer?: FoodoraCustomer;
-    delivery?: FoodoraDelivery;
-    discounts?: FoodoraDiscount[];
-    expeditionType?: string;
-    expiryDate?: string;
-    extraParameters?: FoodoraExtraParameters;
-    localInfo?: FoodoraLocalInfo;
-    payment?: FoodoraPayment;
-    test?: boolean;
-    shortCode?: string;
-    preOrder?: boolean;
-    pickup?: any;
-    platformRestaurant?: FoodoraPlatformRestaurant;
-    price?: FoodoraPrice;
-    products?: FoodoraProduct[];
-    corporateOrder?: boolean;
-    corporateTaxId?: string;
-    integrationInfo?: Record<string, any>;
-    mobileOrder?: boolean;
-    webOrder?: boolean;
-    vouchers?: any[];
-    callbackUrls?: FoodoraCallbackUrls;
-    status?: string;
-    reason?: any;
+export interface FoodoraOrder {
+  token?: string;
+  code?: string;
+  comments?: {
+    customerComment?: string;
+    vendorComment?: string;
   };
+  createdAt?: string;
+  customer?: FoodoraCustomer;
+  delivery?: FoodoraDelivery;
+  discounts?: FoodoraDiscount[];
+  expeditionType?: string;
+  expiryDate?: string;
+  extraParameters?: FoodoraExtraParameters;
+  localInfo?: FoodoraLocalInfo;
+  payment?: FoodoraPayment;
+  test?: boolean;
+  shortCode?: string;
+  preOrder?: boolean;
+  pickup?: any;
+  platformRestaurant?: FoodoraPlatformRestaurant;
+  price?: FoodoraPrice;
+  products?: FoodoraProduct[];
+  corporateOrder?: boolean;
+  corporateTaxId?: string;
+  integrationInfo?: Record<string, any>;
+  mobileOrder?: boolean;
+  webOrder?: boolean;
+  vouchers?: any[];
+  callbackUrls?: FoodoraCallbackUrls;
+  status?: string;
+  reason?: any;
 }
-
 
 export interface FoodoraCustomer {
   email?: string;
@@ -46,14 +43,12 @@ export interface FoodoraCustomer {
   flags?: string[];
 }
 
-
 export interface FoodoraDelivery {
   address?: FoodoraAddress;
   expectedDeliveryTime?: string;
   expressDelivery?: boolean;
   riderPickupTime?: string;
 }
-
 
 export interface FoodoraAddress {
   postcode?: number;
@@ -62,7 +57,6 @@ export interface FoodoraAddress {
   number?: number;
 }
 
-
 export interface FoodoraDiscount {
   name?: string;
   amount?: string;
@@ -70,18 +64,15 @@ export interface FoodoraDiscount {
   sponsorships?: FoodoraSponsorship[];
 }
 
-
 export interface FoodoraSponsorship {
   sponsor?: string;
   amount?: string;
 }
 
-
 export interface FoodoraExtraParameters {
   property1?: string;
   property2?: string;
 }
-
 
 export interface FoodoraLocalInfo {
   countryCode?: string;
@@ -98,7 +89,6 @@ export interface FoodoraLocalInfo {
   website?: string;
 }
 
-
 export interface FoodoraPayment {
   status?: string;
   type?: string;
@@ -108,11 +98,9 @@ export interface FoodoraPayment {
   vatName?: string;
 }
 
-
 export interface FoodoraPlatformRestaurant {
   id?: string;
 }
-
 
 export interface FoodoraPrice {
   deliveryFees?: FoodoraDeliveryFee[];
@@ -138,12 +126,10 @@ export interface FoodoraPrice {
   vatPercent?: string;
 }
 
-
 export interface FoodoraDeliveryFee {
   name?: string;
   value?: number;
 }
-
 
 export interface FoodoraProduct {
   categoryName?: string;
@@ -164,7 +150,6 @@ export interface FoodoraProduct {
   discounts?: FoodoraDiscount[];
 }
 
-
 export interface FoodoraSelectedTopping {
   children?: any[];
   name?: string;
@@ -176,11 +161,9 @@ export interface FoodoraSelectedTopping {
   discounts?: FoodoraDiscount[];
 }
 
-
 export interface FoodoraVariation {
   name?: string;
 }
-
 
 export interface FoodoraCallbackUrls {
   orderAcceptedUrl?: string;
@@ -188,4 +171,3 @@ export interface FoodoraCallbackUrls {
   orderPickedUpUrl?: string;
   orderPreparedUrl?: string;
 }
-

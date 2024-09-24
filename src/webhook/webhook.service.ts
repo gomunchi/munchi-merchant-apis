@@ -14,6 +14,13 @@ import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { WoltWebhookService } from 'src/provider/wolt/wolt-webhook';
 import { SocketService } from 'src/socket/socket.service';
 import { UtilsService } from 'src/utils/utils.service';
+import { FoodoraService } from 'src/provider/foodora/foodora.service';
+import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
+import { FoodoraOrder } from 'src/provider/foodora/dto/foodora-order-response.dto';
+import { ProviderOrder } from 'src/provider/provider.type';
+import { FoodoraOrderStatus } from 'src/provider/foodora/dto/foodora.enum.dto';
+import { OrderStatusEnum } from 'src/order/dto/order.dto';
+import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
 
 @Injectable()
 export class WebhookService {
@@ -23,11 +30,14 @@ export class WebhookService {
     private utils: UtilsService,
     private errorHandlingService: ErrorHandlingService,
     private woltService: WoltService,
+    private foodoraService: FoodoraService,
     private woltWebhookService: WoltWebhookService,
+    private foodoraWebhookService: FoodoraWebhookService,
     private orderingService: OrderingService,
     private orderingOrderMapperService: OrderingOrderMapperService,
     private orderingRepositoryService: OrderingRepositoryService,
     private woltOrderMapperService: WoltOrderMapperService,
+    private foodoraOredrMapperService: FoodoraOrderMapperService,
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
   ) {}
@@ -153,9 +163,35 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
+  public async processFoodoraOrder(foodoraWebhookdata: any) {
+    const venueId = foodoraWebhookdata.order.platformRestaurant.id;
+    const order: FoodoraOrder = await this.foodoraService.getOrderById(
+      'munchi',
+      foodoraWebhookdata.order.token,
+    );
+
+    const business = await this.businessService.findBusinessByWoltVenueId(venueId);
+
+    return { order, venueId, business };
+  }
+
   async foodoraOrderNotification(foodoraWebhookdata: any, request: any): Promise<string> {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
     this.logger.log(`Received Foodora request: ${JSON.stringify(request)}`);
+
+    try {
+      const { order } = await this.processFoodoraOrder(foodoraWebhookdata);
+
+      const formattedFoodoraOrder =
+        await this.foodoraOredrMapperService.mapFoodoraOrderToOrderResponse(order);
+
+      if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
+        await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder);
+        return 'New order processed';
+      }
+    } catch (error) {
+      this.errorHandlingService.handleError(error, 'foodoraOrderNotification');
+    }
 
     return 'Its just a dummy response for testing purpose';
   }

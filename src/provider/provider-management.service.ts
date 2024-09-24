@@ -62,6 +62,8 @@ export class ProviderManagmentService {
 
     // TODO: Map provider enum to an array then use that array to map to get order from the database. Filter out "Munchi" first as it is not stored in our database
     //If wolt provider included in the body data
+    let allOrders = [...formattedOrderingOrders];
+
     if (provider.includes(ProviderEnum.Wolt)) {
       const woltOrders = await this.woltService.getOrderByStatus(
         orderingToken,
@@ -69,26 +71,25 @@ export class ProviderManagmentService {
         businessOrderingIds,
         orderBy,
       );
-
-      const allOrders = [...woltOrders, ...formattedOrderingOrders];
-      const sortedOrders = allOrders.sort((a, b) => {
-        const dateA = new Date(a.createdAt);
-        const dateB = new Date(b.createdAt);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-      return sortedOrders;
+      allOrders = [...allOrders, ...woltOrders];
     }
-
+    
     if (provider.includes(ProviderEnum.Foodora)) {
       const foodoraOrders = await this.foodoraService.getOrderByStatus(
         orderingToken,
         status,
         businessOrderingIds,
       );
+      allOrders = [...allOrders, ...foodoraOrders];
     }
-
-    return formattedOrderingOrders;
+    
+    const sortedOrders = allOrders.sort((a, b) => {
+      const dateA = new Date(a.createdAt);
+      const dateB = new Date(b.createdAt);
+      return dateA.getTime() - dateB.getTime();
+    });
+    
+    return sortedOrders;
   }
 
   async getOrderById(orderId: string, orderingUserId: number) {
