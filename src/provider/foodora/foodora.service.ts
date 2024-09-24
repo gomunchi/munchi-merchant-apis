@@ -288,7 +288,7 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async getOrderById(credentials: string, id: string): Promise<ProviderOrder> {
+  async getOrderById(credentials: string, id: string): Promise<FoodoraOrder> {
     const chainCode = credentials || 'munchi';
     return this.getOrderDetails(chainCode, id);
   }

@@ -33,18 +33,16 @@ export class FoodoraOrderMapperService {
   }
 
   public async mapFoodoraOrderToOrderResponse(foodoraOrder: FoodoraOrder): Promise<OrderResponse> {
-    const businessData = await this.validateBusinessByVenueId(
-      foodoraOrder.order.platformRestaurant.id,
-    );
+    const businessData = await this.validateBusinessByVenueId(foodoraOrder.platformRestaurant.id);
 
     let deliveryType: number = OrderingDeliveryType.PickUp;
 
-    if (foodoraOrder.order.expeditionType === 'delivery') {
+    if (foodoraOrder.expeditionType === 'delivery') {
       deliveryType = OrderingDeliveryType.Delivery;
     }
 
     const products: ProductDto[] =
-      foodoraOrder.order.products?.map((foodoraProduct) =>
+      foodoraOrder.products?.map((foodoraProduct) =>
         this.mapFoodoraProductToProductDto(foodoraProduct),
       ) || [];
 
@@ -57,47 +55,47 @@ export class FoodoraOrderMapperService {
     };
 
     const createdAt = this.utilsService.convertTimeToTimeZone(
-      foodoraOrder.order.createdAt,
+      foodoraOrder.createdAt,
       'Europe/Helsinki',
     );
 
-    const deliveryTime = foodoraOrder.order.delivery?.expectedDeliveryTime
+    const deliveryTime = foodoraOrder.delivery?.expectedDeliveryTime
       ? this.utilsService.convertTimeToTimeZone(
-          foodoraOrder.order.delivery.expectedDeliveryTime,
+          foodoraOrder.delivery.expectedDeliveryTime,
           'Europe/Helsinki',
         )
       : null;
 
-    const preOrderTime = foodoraOrder.order.preOrder
-      ? this.utilsService.convertTimeToTimeZone(foodoraOrder.order.expiryDate, 'Europe/Helsinki')
+    const preOrderTime = foodoraOrder.preOrder
+      ? this.utilsService.convertTimeToTimeZone(foodoraOrder.expiryDate, 'Europe/Helsinki')
       : null;
 
     const payMethodId =
-      foodoraOrder.order.payment?.type === 'online' ? PayMethodEnum.Card : PayMethodEnum.Cash;
+      foodoraOrder.payment?.type === 'online' ? PayMethodEnum.Card : PayMethodEnum.Cash;
 
     return {
-      id: foodoraOrder.order.token,
+      id: foodoraOrder.token,
       provider: ProviderEnum.Foodora,
-      orderId: foodoraOrder.order.token,
-      orderNumber: foodoraOrder.order.code,
+      orderId: foodoraOrder.token,
+      orderNumber: foodoraOrder.code,
       business: {
-        publicId: foodoraOrder.order.platformRestaurant.id,
+        publicId: foodoraOrder.platformRestaurant.id,
         name: businessData.business.name,
         logo: businessData.business.logo,
         email: businessData.business.email,
         address: businessData.business.address,
       },
-      type: preOrderTime ? 'preorder' as any : 'instant' as any,
-      status: orderStatusMapping[foodoraOrder.order.status] || OrderStatusEnum.PENDING,
+      type: preOrderTime ? ('preorder' as any) : ('instant' as any),
+      status: orderStatusMapping[foodoraOrder.status] || OrderStatusEnum.PENDING,
       deliveryType: deliveryType,
       createdAt: createdAt,
-      comment: foodoraOrder.order.comments?.customerComment,
+      comment: foodoraOrder.comments?.customerComment,
       preparedIn: null,
       preorder:
-        foodoraOrder.order.preOrder && preOrderTime
+        foodoraOrder.preOrder && preOrderTime
           ? {
               status:
-                foodoraOrder.order.status === FoodoraOrderStatus.Accepted
+                foodoraOrder.status === FoodoraOrderStatus.Accepted
                   ? OrderResponsePreOrderStatusEnum.Waiting
                   : OrderResponsePreOrderStatusEnum.Confirm,
               preorderTime: preOrderTime,
@@ -106,15 +104,15 @@ export class FoodoraOrderMapperService {
       table: null,
       products: products,
       summary: {
-        total: foodoraOrder.order.price?.grandTotal,
+        total: foodoraOrder.price?.grandTotal,
       },
       deliveryEta: deliveryTime,
       pickupEta: null,
       offers: [],
-      lastModified: foodoraOrder.order.createdAt,
+      lastModified: foodoraOrder.createdAt,
       customer: {
-        name: foodoraOrder.order.customer?.firstName + ' ' + foodoraOrder.order.customer?.lastName,
-        phone: foodoraOrder.order.customer?.mobilePhone,
+        name: foodoraOrder.customer?.firstName + ' ' + foodoraOrder.customer?.lastName,
+        phone: foodoraOrder.customer?.mobilePhone,
       },
       payMethodId: null,
     };
