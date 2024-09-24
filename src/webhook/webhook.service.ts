@@ -17,8 +17,6 @@ import { UtilsService } from 'src/utils/utils.service';
 import { FoodoraService } from 'src/provider/foodora/foodora.service';
 import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
 import { FoodoraOrder } from 'src/provider/foodora/dto/foodora-order-response.dto';
-import { ProviderOrder } from 'src/provider/provider.type';
-import { FoodoraOrderStatus } from 'src/provider/foodora/dto/foodora.enum.dto';
 import { OrderStatusEnum } from 'src/order/dto/order.dto';
 import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
 
@@ -37,7 +35,7 @@ export class WebhookService {
     private orderingOrderMapperService: OrderingOrderMapperService,
     private orderingRepositoryService: OrderingRepositoryService,
     private woltOrderMapperService: WoltOrderMapperService,
-    private foodoraOredrMapperService: FoodoraOrderMapperService,
+    private foodoraOrderMapperService: FoodoraOrderMapperService,
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
   ) {}
@@ -183,7 +181,7 @@ export class WebhookService {
       const { order } = await this.processFoodoraOrder(foodoraWebhookdata);
 
       const formattedFoodoraOrder =
-        await this.foodoraOredrMapperService.mapFoodoraOrderToOrderResponse(order);
+        await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
 
       if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
         await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder);
