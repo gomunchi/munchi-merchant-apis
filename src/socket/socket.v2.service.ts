@@ -6,13 +6,14 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from '@nestjs/websockets';
-import { Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { BusinessService } from 'src/business/business.service';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { OrderingOrderMapperService } from 'src/provider/ordering/ordering-order-mapper';
 import { OrderingService } from 'src/provider/ordering/ordering.service';
+import { WoltRepositoryService } from 'src/provider/wolt/wolt-repository';
 import { BaseGateway } from './socket.base.service';
 
 @WebSocketGateway({
@@ -26,7 +27,6 @@ import { BaseGateway } from './socket.base.service';
   allowEIO3: true,
   path: '/socket.io',
 })
-// @UseInterceptors(SocketAuthInterceptor)
 @Injectable()
 export class AuthenticatedGateway
   extends BaseGateway
@@ -35,23 +35,59 @@ export class AuthenticatedGateway
   constructor(
     protected readonly businessService: BusinessService,
     protected readonly errorHandlingService: ErrorHandlingService,
-    private readonly orderingService: OrderingService,
-    private readonly orderingOrderMapperService: OrderingOrderMapperService,
+    protected readonly orderingService: OrderingService,
+    protected readonly orderingOrderMapperService: OrderingOrderMapperService,
+    protected readonly woltRepositoryService: WoltRepositoryService,
   ) {
-    super(businessService, errorHandlingService);
+    super(
+      businessService,
+      orderingOrderMapperService,
+      orderingService,
+      woltRepositoryService,
+      errorHandlingService,
+    );
   }
 
   afterInit(server: Server) {
     this.logger.log('Authenticated WebSocket Gateway initialized');
   }
 
-  handleConnection(client: Socket, ...args: any[]) {
-    this.logger.log(`Authenticated client connected: ${client.id}`);
+  async handleConnection(client: Socket, ...args: any[]) {
+    try {
+      const token = client.handshake.auth.token;
+
+      const userId = client.handshake.auth['x-user-id'];
+
+      if (!token || !userId) {
+        this.handleDisconnect(client, 'Missing parameter');
+        return false;
+      }
+
+      try {
+        await this.orderingService.getUser(token, userId);
+      } catch (error) {
+        this.handleDisconnect(client, 'Authenticate failed, stopping connection');
+      }
+
+      this.logger.log(`Authenticated client connected: ${client.id}`);
+      return true;
+    } catch (error: any) {
+      this.handleDisconnect(client, `${error.message}`);
+      return false;
+    }
   }
 
-  handleDisconnect(client: Socket) {
-    this.logger.log(`Authenticated client disconnected: ${client.id}`);
-    this.updateActiveRooms();
+  handleDisconnect(client: Socket, reason?: string) {
+    // Emit an error event to the client before disconnecting
+    if (reason) {
+      client.emit('connection_error', { message: reason });
+    }
+
+    // Disconnect the client
+    client.disconnect(true);
+    this.logger.log(`Client disconnected: ${client.id}${reason ? `, Reason: ${reason}` : ''}`);
+    // Optionally, you can update active rooms or perform any cleanup here
+    // this.updateActiveRooms();
   }
 
   @SubscribeMessage('join')
@@ -62,6 +98,21 @@ export class AuthenticatedGateway
   @SubscribeMessage('leave')
   async onLeave(client: Socket, room: string | string[]) {
     await this.handleLeaveRooms(client, room);
+  }
+
+  @SubscribeMessage('ping')
+  async onPing(data: string) {
+    this.logger.log(`Event emitted from user ${data}`);
+  }
+
+  @SubscribeMessage('order-popup-closed')
+  async onOrderPopupclose(orderId: string, businessId: string) {
+    this.server.to(businessId).emit('close-order-popup', orderId);
+  }
+
+  @SubscribeMessage('order_change')
+  async onOrderChange(orderId: string, businessId: string) {
+    this.server.to(businessId).emit('close-order-popup', orderId);
   }
 
   async emitOrderChange(order: OrderingOrder) {
