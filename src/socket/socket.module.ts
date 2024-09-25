@@ -12,6 +12,6 @@ import { AuthModule } from 'src/auth/auth.module';
 @Module({
   imports: [BusinessModule, ProviderModule, UserModule, AuthModule],
   providers: [SocketService, AuthenticatedGateway, JwtStrategy, JwtGuard],
-  exports: [SocketService],
+  exports: [SocketService, AuthenticatedGateway],
 })
 export class SocketModule {}
