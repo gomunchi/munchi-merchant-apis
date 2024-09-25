@@ -73,7 +73,7 @@ export class ProviderManagmentService {
       );
       allOrders = [...allOrders, ...woltOrders];
     }
-    
+
     if (provider.includes(ProviderEnum.Foodora)) {
       const foodoraOrders = await this.foodoraService.getOrderByStatus(
         orderingToken,
@@ -82,13 +82,13 @@ export class ProviderManagmentService {
       );
       allOrders = [...allOrders, ...foodoraOrders];
     }
-    
+
     const sortedOrders = allOrders.sort((a, b) => {
       const dateA = new Date(a.createdAt);
       const dateB = new Date(b.createdAt);
       return dateA.getTime() - dateB.getTime();
     });
-    
+
     return sortedOrders;
   }
 
