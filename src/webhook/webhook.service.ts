@@ -19,6 +19,7 @@ import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { WoltWebhookService } from 'src/provider/wolt/wolt-webhook';
 import { SocketService } from 'src/socket/socket.service';
+import { AuthenticatedGateway } from 'src/socket/socket.v2.service';
 
 @Injectable()
 export class WebhookService {
@@ -38,6 +39,7 @@ export class WebhookService {
     private foodoraOrderMapperService: FoodoraOrderMapperService,
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
+    private socketV2Service: AuthenticatedGateway,
   ) {}
 
   async emitUpdateAppState(deviceId: string) {
@@ -77,8 +79,28 @@ export class WebhookService {
         retryDelay: 2000, // 2 seconds, will increase with each retry
       });
 
-      if (ackResult.received) {
+      const ackResultV2 = await this.socketV2Service.emitWithAcknowledgement({
+        room: order.business_id.toString(),
+        event: 'orders_register',
+        data: formattedOrder,
+        acknowledgementType: 'orders_register',
+        timeout: 10000, // 10 seconds
+        retries: 3,
+        retryDelay: 2000, // 2 seconds, will increase with each retry
+      });
+
+      if (ackResult.received || ackResultV2.received) {
         this.logger.log(`Order register event acknowledged: ${ackResult.message}`);
+      } else {
+        this.logger.warn(
+          `No acknowledgement received for order ${order.id} from business ${order.business.name}`,
+        );
+      }
+
+      if (ackResultV2.received) {
+        this.logger.log(
+          `Order register event acknowledged with authenticated: ${ackResult.message}`,
+        );
       } else {
         this.logger.warn(
           `No acknowledgement received for order ${order.id} from business ${order.business.name}`,
@@ -114,7 +136,17 @@ export class WebhookService {
           retryDelay: 2000, // 2 seconds, will increase with each retry
         });
 
-        if (ackResult.received) {
+        const ackResultV2 = await this.socketV2Service.emitWithAcknowledgement({
+          room: order.business_id.toString(),
+          event: 'order_change',
+          data: formattedOrder,
+          acknowledgementType: 'order_change',
+          timeout: 10000, // 10 seconds
+          retries: 3,
+          retryDelay: 2000, // 2 seconds, will increase with each retry
+        });
+
+        if (ackResult.received || ackResultV2.received) {
           this.logger.log(`Order register event acknowledged: ${ackResult.message}`);
         } else {
           this.logger.warn(

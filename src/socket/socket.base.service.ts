@@ -111,7 +111,7 @@ export abstract class BaseGateway {
     this.logger.log(`Total number of active rooms: ${this.activeRooms.size}`);
   }
 
-  protected async emitWithAcknowledgement({
+  public async emitWithAcknowledgement({
     room,
     event,
     data,
@@ -191,7 +191,7 @@ export abstract class BaseGateway {
     }
   }
 
-  protected createDefaultAcknowledgement(
+  public createDefaultAcknowledgement(
     type: AcknowledgementType,
     data: any,
     received: boolean,
