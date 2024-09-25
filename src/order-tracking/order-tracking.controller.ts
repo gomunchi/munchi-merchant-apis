@@ -20,7 +20,7 @@ export class OrderTrackingController {
 
   @Get(':orderId')
   async getOrdersById(@Param('orderId') orderId: string) {
-    const orders = await this.orderTrackingService.getOrders(orderId);
+    const orders = await this.orderTrackingService.getOrdersById(orderId);
 
     return {
       error: false,
