@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import {
+  MenuProductDto,
+  MenuProductOptionDto,
+  OrderingCategoryExtraOptionSubOption,
+  OrderingProductCategory,
+} from 'src/menu/dto/menu.dto';
+import {
   Catalog,
   CatalogImportDto,
-  CatalogItem,
   CatalogItemType,
   Category,
   MenuType,
@@ -11,14 +16,6 @@ import {
   ToppingType,
   WeekDay,
 } from 'src/provider/foodora/dto/foodora-menu.dto';
-import {
-  MenuCategoryDto,
-  MenuProductDto,
-  MenuProductOptionDto,
-  MenuProductOptionSuboptionDto,
-  OrderingCategoryExtraOptionSubOption,
-  OrderingProductCategory,
-} from 'src/menu/dto/menu.dto';
 
 @Injectable()
 export class OrderingMenuMapperService {

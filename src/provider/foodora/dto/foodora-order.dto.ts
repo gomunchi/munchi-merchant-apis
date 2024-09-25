@@ -1,4 +1,4 @@
-import { FoodoraOrderStatus } from "./foodora.enum.dto";
+import { FoodoraOrderStatus } from './foodora.enum.dto';
 
 export interface UpdateFoodoraOrderStatusDto {
   acceptanceTime?: string;

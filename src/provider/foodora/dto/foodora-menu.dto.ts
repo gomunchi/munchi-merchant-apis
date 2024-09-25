@@ -10,13 +10,7 @@ export interface Catalog {
   };
 }
 
-export type CatalogItem =
-  | Menu
-  | Product
-  | Topping
-  | Category
-  | Image
-  | ScheduleEntry;
+export type CatalogItem = Menu | Product | Topping | Category | Image | ScheduleEntry;
 
 export interface BaseCatalogItem {
   id: string;
