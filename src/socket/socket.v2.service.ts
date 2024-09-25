@@ -87,7 +87,7 @@ export class AuthenticatedGateway
     client.disconnect(true);
     this.logger.log(`Client disconnected: ${client.id}${reason ? `, Reason: ${reason}` : ''}`);
     // Optionally, you can update active rooms or perform any cleanup here
-    // this.updateActiveRooms();
+    this.updateActiveRooms();
   }
 
   @SubscribeMessage('join')

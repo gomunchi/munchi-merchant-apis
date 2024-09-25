@@ -16,7 +16,6 @@ export class TokenInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const authorizationHeader = request.headers.authorization;
     const user_id = request.headers['x-user-id'];
-    console.log('🚀 ~ TokenInterceptor ~ intercept ~ user_id:', user_id);
 
     if (!request) {
       throw new UnauthorizedException('Invalid request');

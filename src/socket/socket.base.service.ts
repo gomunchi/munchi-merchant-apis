@@ -99,7 +99,18 @@ export abstract class BaseGateway {
   }
 
   protected updateActiveRooms() {
-    this.activeRooms = new Set(this.server.sockets.adapter.rooms.keys());
+    if (!this.server || !this.server.sockets || !this.server.sockets.adapter) {
+      this.logger.warn('Server or sockets adapter not initialized');
+      return;
+    }
+
+    const rooms = this.server.sockets.adapter.rooms;
+    if (!rooms) {
+      this.logger.warn('Rooms not available');
+      return;
+    }
+
+    this.activeRooms = new Set(rooms.keys());
     // Remove socket IDs from the set of rooms
     for (const socketId of this.server.sockets.sockets.keys()) {
       this.activeRooms.delete(socketId);
