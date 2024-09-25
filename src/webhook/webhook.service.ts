@@ -7,25 +7,25 @@ import { OrderingOrderStatus } from 'src/provider/ordering/ordering.type';
 import { WoltOrderMapperService } from 'src/provider/wolt/wolt-order-mapper';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 
+import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
+import { OrderStatusEnum } from 'src/order/dto/order.dto';
+import { FoodoraOrder } from 'src/provider/foodora/dto/foodora-order-response.dto';
+import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
+import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
+import { FoodoraService } from 'src/provider/foodora/foodora.service';
 import { OrderingOrder } from 'src/provider/ordering/dto/ordering-order.dto';
 import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { WoltWebhookService } from 'src/provider/wolt/wolt-webhook';
 import { SocketService } from 'src/socket/socket.service';
-import { UtilsService } from 'src/utils/utils.service';
-import { FoodoraService } from 'src/provider/foodora/foodora.service';
-import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
-import { FoodoraOrder } from 'src/provider/foodora/dto/foodora-order-response.dto';
-import { OrderStatusEnum } from 'src/order/dto/order.dto';
-import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
 
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
   constructor(
     private businessService: BusinessService,
-    private utils: UtilsService,
+    private configService: ConfigService,
     private errorHandlingService: ErrorHandlingService,
     private woltService: WoltService,
     private foodoraService: FoodoraService,
@@ -46,9 +46,22 @@ export class WebhookService {
 
   async newOrderNotification(order: OrderingOrder): Promise<string> {
     this.logger.log(`Processing new order notification for order ${order.id}`);
+    const orderingApiKey = await this.configService.get('ORDERING_API_KEY');
+    const customer = await this.orderingService.getUser('', order.customer_id, orderingApiKey);
+
+    const newOrder: any = {
+      ...order,
+      customer: {
+        phone: customer.phone,
+        cellphone: customer.cellphone,
+        ...order.customer,
+      },
+    };
 
     try {
-      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+      const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
+        newOrder,
+      );
 
       await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
 
@@ -135,9 +148,7 @@ export class WebhookService {
     this.logger.log(`Received Wolt webhook data: ${JSON.stringify(woltWebhookdata)}`);
 
     try {
-      const { order, venueId, business, woltCredentials } = await this.processWoltOrder(
-        woltWebhookdata,
-      );
+      const { order, business, woltCredentials } = await this.processWoltOrder(woltWebhookdata);
       const formattedWoltOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(order);
 
       if (this.woltWebhookService.isNewOrder(woltWebhookdata)) {
