@@ -461,8 +461,8 @@ export class OrderingService implements ProviderService {
     }
 
     try {
-      const response = await axios.request(options);
-      return response.data.result;
+      const { error, result } = (await axios.request(options)).data;
+      return { error, result };
     } catch (error) {
       this.utilService.logError(error);
     }

@@ -49,22 +49,25 @@ export class WebhookService {
   async newOrderNotification(order: OrderingOrder): Promise<string> {
     this.logger.log(`Processing new order notification for order ${order.id}`);
     const orderingApiKey = await this.configService.get('ORDERING_API_KEY');
-    const customer = await this.orderingService.getUser('', order.customer_id, orderingApiKey);
+
+    const { result: customer } = await this.orderingService.getUser(
+      '',
+      order.customer_id,
+      orderingApiKey,
+    );
 
     const newOrder: any = {
       ...order,
       customer: {
-        phone: customer.phone,
-        cellphone: customer.cellphone,
         ...order.customer,
+        phone: customer.cellphone || order.customer.phone,
+        cellphone: customer.cellphone || order.customer.cellphone,
       },
     };
-
     try {
       const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         newOrder,
       );
-
       await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
 
       this.logger.log(`Emitting order register event to business ${order.business.name}`);
