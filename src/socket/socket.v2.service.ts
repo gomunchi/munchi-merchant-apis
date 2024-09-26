@@ -62,11 +62,10 @@ export class AuthenticatedGateway
         this.handleDisconnect(client, 'Missing parameter');
         return false;
       }
-
-      try {
-        await this.orderingService.getUser(token, userId);
-      } catch (error) {
-        this.handleDisconnect(client, 'Authenticate failed, stopping connection');
+      const { error, result } = await this.orderingService.getUser(token, userId);
+      if (error) {
+        this.handleDisconnect(client, `${result[0]}`);
+        return;
       }
 
       this.logger.log(`Authenticated client connected: ${client.id}`);

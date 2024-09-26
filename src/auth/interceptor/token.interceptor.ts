@@ -29,7 +29,15 @@ export class TokenInterceptor implements NestInterceptor {
     const orderingAccessToken = authorizationHeader.split(' ')[1];
 
     try {
-      await this.orderingService.getUser(orderingAccessToken, user_id);
+      const { error, result } = await this.orderingService.getUser(orderingAccessToken, user_id);
+
+      if (!error && result) {
+        request.users = {
+          access_token: orderingAccessToken,
+          ...result,
+        };
+        return next.handle();
+      }
       return next.handle();
     } catch (error) {
       throw new UnauthorizedException('Invalid token or user');
