@@ -124,6 +124,8 @@ export class WebhookService {
     } else {
       this.eventEmitter.emit('preorderQueue.validate', order.id.toString());
 
+      await this.orderingService.syncOrderingOrder(order.id.toString());
+
       try {
         const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
         const ackResult = await this.socketService.emitWithAcknowledgement({
@@ -153,7 +155,6 @@ export class WebhookService {
             `No acknowledgement received for order ${formattedOrder.orderNumber} from business ${order.business.name}`,
           );
         }
-        await this.orderingService.syncOrderingOrder(order.id.toString());
       } catch (error) {
         this.errorHandlingService.handleError(error, 'changeOrderNotification');
       }
