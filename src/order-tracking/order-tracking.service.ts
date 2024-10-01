@@ -42,7 +42,7 @@ export class OrderTrackingService {
   }
 
   async getOrdersById(access_token: string, orderId: string) {
-    let order_id = '';
+    let order_id = orderId;
 
     if (!Number(orderId)) {
       const orderingOrder = await this.orderingService.getOrderById(access_token, orderId);
