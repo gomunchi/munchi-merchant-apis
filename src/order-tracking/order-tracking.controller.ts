@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseInterceptors } from '@nestjs/common';
 import { OrderTrackingService } from './order-tracking.service';
 import { TokenInterceptor } from 'src/auth/interceptor/token.interceptor';
 
@@ -19,12 +19,14 @@ export class OrderTrackingController {
   }
 
   @Get(':orderId')
-  async getOrdersById(@Param('orderId') orderId: string) {
-    const orders = await this.orderTrackingService.getOrdersById(orderId);
+  async getOrdersById(@Req() req: any, @Param('orderId') orderId: string) {
+    const { access_token } = req.users;
+
+    const order = await this.orderTrackingService.getOrdersById(access_token, orderId);
 
     return {
       error: false,
-      data: orders,
+      data: order,
       message: 'success',
       status: 200,
     };

@@ -4,12 +4,14 @@ import moment from 'moment';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { OrderStatusEnum } from 'src/order/dto/order.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { WoltOrderPrismaSelectArgs } from 'src/provider/wolt/dto/wolt-order.dto';
 
 @Injectable()
 export class OrderTrackingService {
   constructor(
     private readonly prismaService: PrismaService,
+    private readonly orderingService: OrderingService,
     public errorHandlingService: ErrorHandlingService,
   ) {}
   async getOrders(businessId: string) {
@@ -39,10 +41,17 @@ export class OrderTrackingService {
     }
   }
 
-  async getOrdersById(orderId: string) {
+  async getOrdersById(access_token: string, orderId: string) {
+    let order_id = '';
+
+    if (!Number(orderId)) {
+      const orderingOrder = await this.orderingService.getOrderById(access_token, orderId);
+      order_id = orderingOrder.id.toString();
+    }
+
     const ordersFindUniqueArs = Prisma.validator<Prisma.OrderFindUniqueArgs>()({
       where: {
-        orderId: orderId,
+        orderId: order_id,
       },
       include: WoltOrderPrismaSelectArgs,
     });
