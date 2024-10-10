@@ -1,12 +1,10 @@
-import { Injectable } from '@nestjs/common';
 import { AvailableOrderStatus, OrderResponse } from 'src/order/dto/order.dto';
 import { OrderData } from 'src/type';
 
-import { ProviderOrder } from './provider.type';
-import { OrderingOrder } from './ordering/dto/ordering-order.dto';
 import { Provider } from '@prisma/client';
+import { OrderingOrder } from './ordering/dto/ordering-order.dto';
+import { ProviderOrder } from './provider.type';
 
-@Injectable()
 export abstract class ProviderService {
   abstract getOrderById(credentials: string, id: string): Promise<ProviderOrder>;
 
