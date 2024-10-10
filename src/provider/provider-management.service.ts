@@ -33,36 +33,31 @@ export class ProviderManagmentService {
   private readonly logger = new Logger(ProviderManagmentService.name);
 
   private getSortingTime(order: OrderResponse): Date {
-    if (order.pickupEta) return new Date(order.pickupEta);
-    if (order.deliveryEta) return new Date(order.deliveryEta);
-    return new Date(order.createdAt);
+    const now = new Date();
+    let sortingTime: Date;
+
+    if (order.pickupEta) {
+      sortingTime = new Date(order.pickupEta);
+    } else if (order.deliveryEta) {
+      sortingTime = new Date(order.deliveryEta);
+    } else {
+      sortingTime = new Date(order.createdAt);
+    }
+
+    // If the sorting time is in the past, use the current time instead
+    if (sortingTime < now) {
+      sortingTime = now;
+    }
+
+    return sortingTime;
   }
 
   private sortOrders(orders: OrderResponse[]): OrderResponse[] {
-    return orders.sort(
-      (a, b) => this.getSortingTime(a).getTime() - this.getSortingTime(b).getTime(),
-    );
-  }
-
-  private async fetchOrderingOrders(
-    orderingToken: string,
-    status: AvailableOrderStatus[],
-    businessOrderingIds: string[],
-  ): Promise<OrderResponse[]> {
-    const orderingOrders = await this.orderingService.getOrderByStatus(
-      orderingToken,
-      status,
-      businessOrderingIds,
-    );
-
-    return Promise.all(
-      orderingOrders.map(async (order) => {
-        this.logger.log(
-          `Success in retrieving order for ${order.business.name} with status ${order.status}`,
-        );
-        return this.orderingOrderMapperService.mapOrderToOrderResponse(order);
-      }),
-    );
+    return orders.sort((a, b) => {
+      const timeA = this.getSortingTime(a);
+      const timeB = this.getSortingTime(b);
+      return timeA.getTime() - timeB.getTime();
+    });
   }
 
   async getOrderByStatus(
@@ -103,6 +98,27 @@ export class ProviderManagmentService {
     }
 
     return this.sortOrders(allOrders);
+  }
+
+  private async fetchOrderingOrders(
+    orderingToken: string,
+    status: AvailableOrderStatus[],
+    businessOrderingIds: string[],
+  ): Promise<OrderResponse[]> {
+    const orderingOrders = await this.orderingService.getOrderByStatus(
+      orderingToken,
+      status,
+      businessOrderingIds,
+    );
+
+    return Promise.all(
+      orderingOrders.map(async (order) => {
+        this.logger.log(
+          `Success in retrieving order for ${order.business.name} with status ${order.status}`,
+        );
+        return this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+      }),
+    );
   }
 
   async getOrderById(orderId: string, orderingUserId: number) {
