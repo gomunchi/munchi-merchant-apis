@@ -68,6 +68,9 @@ export class WebhookService {
       const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         newOrder,
       );
+
+      this.logger.debug(`Format order data:  ${JSON.stringify(formattedOrder)}`);
+
       await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
 
       this.logger.log(`Emitting order register event to business ${order.business.name}`);
