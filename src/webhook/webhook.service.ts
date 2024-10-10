@@ -47,17 +47,12 @@ export class WebhookService {
   }
 
   async newOrderNotification(order: OrderingOrder): Promise<string> {
-    console.log('Original order:', JSON.stringify(order));
-
     const orderingApiKey = await this.configService.get('ORDERING_API_KEY');
-    console.log('🚀 ~ WebhookService ~ newOrderNotification ~ orderingApiKey:', orderingApiKey);
     const { result: customer } = await this.orderingService.getUser(
       '',
       order.customer_id,
       orderingApiKey,
     );
-
-    console.log('Customer data:', JSON.stringify(customer));
 
     const newOrder: any = {
       ...order,
@@ -68,17 +63,15 @@ export class WebhookService {
       },
     };
 
-    console.log('New order:', JSON.stringify(newOrder));
     try {
       const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         newOrder,
       );
+      console.log('🚀 formattedOrder:', JSON.stringify(formattedOrder));
 
       this.logger.log(
         `Processing new format order notification for order  ${JSON.stringify(formattedOrder)}`,
       );
-
-      this.logger.debug(`Format order data:  ${JSON.stringify(formattedOrder)}`);
 
       await this.orderingRepositoryService.saveOrderingOrder(formattedOrder);
 
