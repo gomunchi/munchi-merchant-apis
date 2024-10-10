@@ -65,10 +65,6 @@ export class OrderingOrderMapperService {
     }`;
 
     const cellphone = orderingOrder.customer.cellphone || orderingOrder.customer.phone;
-    console.log(
-      '🚀 ~ OrderingOrderMapperService ~ mapOrderToOrderResponse ~ cellphone:',
-      cellphone,
-    );
 
     return {
       id: orderingOrder.id.toString(),
