@@ -34,22 +34,25 @@ export class ProviderManagmentService {
 
   private getSortingTime(order: OrderResponse): Date {
     const now = new Date();
-    let sortingTime: Date;
 
+    // Check for pickupEta first, regardless of order type
     if (order.pickupEta) {
-      sortingTime = new Date(order.pickupEta);
-    } else if (order.deliveryEta) {
-      sortingTime = new Date(order.deliveryEta);
-    } else {
-      sortingTime = new Date(order.createdAt);
+      return new Date(order.pickupEta);
     }
 
-    // If the sorting time is in the past, use the current time instead
-    if (sortingTime < now) {
-      sortingTime = now;
+    // For preorders, use preorderTime if pickupEta is not available
+    if (order.type === 'preorder' && order.preorder && order.preorder.preorderTime) {
+      return new Date(order.preorder.preorderTime);
     }
 
-    return sortingTime;
+    // For all order types, check deliveryEta next
+    if (order.deliveryEta) {
+      return new Date(order.deliveryEta);
+    }
+
+    // Fallback to created time, but ensure it's not in the past
+    const createdAt = new Date(order.createdAt);
+    return createdAt > now ? createdAt : now;
   }
 
   private sortOrders(orders: OrderResponse[]): OrderResponse[] {
@@ -69,15 +72,16 @@ export class ProviderManagmentService {
     const orderBy: Prisma.OrderOrderByWithRelationInput = { id: 'asc' };
     const allOrders: OrderResponse[] = [];
 
-    // Always fetch Munchi (Ordering) orders
-    const orderingOrders = await this.fetchOrderingOrders(
-      orderingToken,
-      status,
-      businessOrderingIds,
-    );
-    allOrders.push(...orderingOrders);
+    // Fetch orders from all specified providers
+    if (provider.includes(ProviderEnum.Munchi)) {
+      const orderingOrders = await this.fetchOrderingOrders(
+        orderingToken,
+        status,
+        businessOrderingIds,
+      );
+      allOrders.push(...orderingOrders);
+    }
 
-    // Fetch orders from other providers if specified
     if (provider.includes(ProviderEnum.Wolt)) {
       const woltOrders = await this.woltService.getOrderByStatus(
         orderingToken,
