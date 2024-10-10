@@ -423,7 +423,7 @@ export class MenuService {
       const calculatedTime = moment().diff(queue.synchronizeTime, 'minutes');
       this.logger.log(`${queue.name}`);
 
-      if (calculatedTime <= 0) {
+      if (calculatedTime === 0) {
         const business = await this.businessService.findBusinessByPublicId(queue.businessPublicId);
 
         await this.providerMangementService.menuTracking(queue, business);

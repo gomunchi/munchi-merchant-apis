@@ -7,6 +7,7 @@ import { OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus, OrderStatusEnum } from './dto/order.dto';
 import { OrderRejectData } from './validation/order.validation';
+import { ProviderEnum } from 'src/provider/provider.type';
 
 @Injectable()
 export class OrderService {
@@ -20,7 +21,7 @@ export class OrderService {
   async getOrderByStatus(
     orderingUserId: number,
     queryData: {
-      providers: string[];
+      providers: ProviderEnum[];
       status: AvailableOrderStatus[];
       businessPublicIds: string[];
     },

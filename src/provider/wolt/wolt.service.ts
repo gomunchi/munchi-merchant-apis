@@ -328,7 +328,7 @@ export class WoltService implements ProviderService {
   }
 
   private async syncPickupTime(woltCredentialsValue: string, order: any): Promise<string> {
-    const maxRetries = 10;
+    const maxRetries = 3;
     const retryInterval = 500;
     const syncPickUpTime = await this.getOrderById(woltCredentialsValue, order.orderId);
     const formattedSyncOrder = await this.woltOrderMapperService.mapOrderToOrderResponse(

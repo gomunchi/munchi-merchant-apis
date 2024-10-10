@@ -7,6 +7,7 @@ import { WoltRepositoryService } from './wolt-repository';
 import { WoltService } from './wolt.service';
 import { OrderResponse } from 'src/order/dto/order.dto';
 import { WoltWebhookOrderStatus } from './wolt.type';
+import { AuthenticatedGateway } from 'src/socket/socket.v2.service';
 
 @Injectable()
 export class WoltWebhookService {
@@ -16,6 +17,7 @@ export class WoltWebhookService {
     private woltRepositoryService: WoltRepositoryService,
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
+    private socketV2Service: AuthenticatedGateway,
   ) {}
 
   public async updatePickupTime(order: WoltOrderV2, venueId: string): Promise<WoltOrderV2> {
@@ -53,6 +55,16 @@ export class WoltWebhookService {
       retryDelay: 2000, // 2 seconds, will increase with each retry
     });
 
+    const ackResultV2 = await this.socketV2Service.emitWithAcknowledgement({
+      room: business.orderingBusinessId,
+      event: 'orders_register',
+      data: formattedWoltOrder,
+      acknowledgementType: 'orders_register',
+      timeout: 10000, // 10 seconds
+      retries: 3,
+      retryDelay: 2000, // 2 seconds, will increase with each retry
+    });
+
     if (ackResult.received) {
       this.logger.log(`New Wolt order registered and acknowledged: ${ackResult.message}`);
     } else {
@@ -60,6 +72,17 @@ export class WoltWebhookService {
         `No acknowledgement received for new Wolt order ${formattedWoltOrder.orderNumber}`,
       );
     }
+
+    if (ackResultV2.received) {
+      this.logger.log(
+        `New Wolt order registered and acknowledged authenticated: ${ackResultV2.message}`,
+      );
+    } else {
+      this.logger.warn(
+        `No acknowledgement received for new Wolt order ${formattedWoltOrder.orderNumber}`,
+      );
+    }
+
     this.eventEmitter.emit(
       'newOrder.notification',
       business.orderingBusinessId,
@@ -96,8 +119,26 @@ export class WoltWebhookService {
       retryDelay: 2000, // 2 seconds, will increase with each retry
     });
 
+    const ackResultV2 = await this.socketV2Service.emitWithAcknowledgement({
+      room: business.orderingBusinessId,
+      event: 'orders_register',
+      data: formattedWoltOrder,
+      acknowledgementType: 'orders_register',
+      timeout: 10000, // 10 seconds
+      retries: 3,
+      retryDelay: 2000, // 2 seconds, will increase with each retry
+    });
+
     if (ackResult.received) {
       this.logger.log(`Wolt order change acknowledged: ${ackResult.message}`);
+    } else {
+      this.logger.warn(
+        `No acknowledgement received for Wolt order change ${formattedWoltOrder.orderNumber}`,
+      );
+    }
+
+    if (ackResultV2.received) {
+      this.logger.log(`Wolt order change acknowledged: ${ackResultV2.message}`);
     } else {
       this.logger.warn(
         `No acknowledgement received for Wolt order change ${formattedWoltOrder.orderNumber}`,

@@ -29,7 +29,8 @@ import {
 @Injectable()
 export class OrderingService implements ProviderService {
   private readonly logger = new Logger(OrderingService.name);
-  private woltApiUrl: string;
+  private woltApiUrl = this.configService.get('WOLT_API_URL');
+  private orderingApiKey = this.configService.get('ORDERING_API_KEY');
   constructor(
     private configService: ConfigService,
     private utilService: UtilsService,
@@ -40,9 +41,7 @@ export class OrderingService implements ProviderService {
     private readonly woltService: WoltService,
     private readonly errorHandlingService: ErrorHandlingService,
     private eventEmitter: EventEmitter2,
-  ) {
-    this.woltApiUrl = this.configService.get('WOLT_API_URL');
-  }
+  ) {}
 
   async getOrderByStatus(
     accessToken: string,
@@ -120,8 +119,20 @@ export class OrderingService implements ProviderService {
     }
 
     try {
-      const response = await axios.request(options);
-      return response.data.result;
+      const { result: order } = (await axios.request(options)).data;
+
+      const { result: customer } = await this.getUser('', order.customer_id, this.orderingApiKey);
+
+      const updatedOrder: OrderingOrder = {
+        ...order,
+        customer: {
+          ...order.customer,
+          phone: customer.cellphone || order.customer.phone,
+          cellphone: customer.cellphone || order.customer.cellphone,
+        },
+      };
+
+      return updatedOrder;
     } catch (error) {
       this.utilService.logError(error);
     }
@@ -446,7 +457,7 @@ export class OrderingService implements ProviderService {
   }
 
   //User service
-  async getUser(accessToken: string, userId: number) {
+  async getUser(accessToken: string, userId: number, apiKey?: string) {
     const options = {
       method: 'GET',
       url: this.utilService.getEnvUrl('users', userId),
@@ -456,9 +467,13 @@ export class OrderingService implements ProviderService {
       },
     };
 
+    if (apiKey) {
+      options.headers['x-api-key'] = apiKey;
+    }
+
     try {
       const response = await axios.request(options);
-      return response.data.result;
+      return response.data;
     } catch (error) {
       this.utilService.logError(error);
     }

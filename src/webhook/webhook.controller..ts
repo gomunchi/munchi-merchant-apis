@@ -24,4 +24,9 @@ export class WebhookController {
   woltNewOrder(@Body() woltWebhookdata: WoltOrderNotification, @Req() request: Request) {
     return this.webhookService.woltOrderNotification(woltWebhookdata);
   }
+
+  @Post('foodora/notification')
+  foodoraNewOrder(@Body() foodoraWebhookdata: any, @Req() request: Request) {
+    return this.webhookService.foodoraOrderNotification(foodoraWebhookdata, request);
+  }
 }

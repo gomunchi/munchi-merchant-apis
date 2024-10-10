@@ -3,16 +3,16 @@ import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Business, BusinessProviders, MenuTracking, Prisma, Provider } from '@prisma/client';
 import { UtilsService } from 'src/utils/utils.service';
-import { AvailableOrderStatus } from '../order/dto/order.dto';
+import { AvailableOrderStatus, OrderResponse } from '../order/dto/order.dto';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
 import { OrderingService } from './ordering/ordering.service';
 
 import { PrismaService } from 'src/prisma/prisma.service';
+import { FoodoraService } from './foodora/foodora.service';
 import {
   OrderingCategoryProductExtra,
   OrderingMenuCategory,
 } from './ordering/dto/ordering-menu.dto';
-import { OrderingOrder } from './ordering/dto/ordering-order.dto';
 import { AvailableProvider, ProviderEnum } from './provider.type';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
@@ -22,6 +22,7 @@ export class ProviderManagmentService {
   constructor(
     private moduleRef: ModuleRef,
     private woltService: WoltService,
+    private foodoraService: FoodoraService,
     private woltRepositoryService: WoltRepositoryService,
     private utilService: UtilsService,
     private orderingService: OrderingService,
@@ -31,54 +32,93 @@ export class ProviderManagmentService {
   ) {}
   private readonly logger = new Logger(ProviderManagmentService.name);
 
+  private getSortingTime(order: OrderResponse): Date {
+    const now = new Date();
+    let sortingTime: Date;
+
+    if (order.pickupEta) {
+      sortingTime = new Date(order.pickupEta);
+    } else if (order.deliveryEta) {
+      sortingTime = new Date(order.deliveryEta);
+    } else {
+      sortingTime = new Date(order.createdAt);
+    }
+
+    // If the sorting time is in the past, use the current time instead
+    if (sortingTime < now) {
+      sortingTime = now;
+    }
+
+    return sortingTime;
+  }
+
+  private sortOrders(orders: OrderResponse[]): OrderResponse[] {
+    return orders.sort((a, b) => {
+      const timeA = this.getSortingTime(a);
+      const timeB = this.getSortingTime(b);
+      return timeA.getTime() - timeB.getTime();
+    });
+  }
+
   async getOrderByStatus(
-    provider: string[],
+    provider: ProviderEnum[],
     status: AvailableOrderStatus[],
     businessOrderingIds: string[],
     { orderingToken }: { orderingToken: string },
-  ) {
-    //There only 2 case here as the munchi provider should always be active and can't be disabled
+  ): Promise<OrderResponse[]> {
+    const orderBy: Prisma.OrderOrderByWithRelationInput = { id: 'asc' };
+    const allOrders: OrderResponse[] = [];
 
-    const orderingOrders = await this.orderingService.getOrderByStatus(
+    // Always fetch Munchi (Ordering) orders
+    const orderingOrders = await this.fetchOrderingOrders(
       orderingToken,
       status,
       businessOrderingIds,
     );
+    allOrders.push(...orderingOrders);
 
-    const formattedOrderingOrders = await Promise.all(
-      orderingOrders.map(async (order: OrderingOrder) => {
-        this.logger.log(
-          `Success in retrieving order for ${order.business.name} with status ${order.status}`,
-        );
-        return await this.orderingOrderMapperService.mapOrderToOrderResponse(order);
-      }),
-    );
-
-    // TODO: Map provider enum to an array then use that array to map to get order from the database. Filter out "Munchi" first as it is not stored in our database
-    //If wolt provider included in the body data
+    // Fetch orders from other providers if specified
     if (provider.includes(ProviderEnum.Wolt)) {
-      const orderBy = Prisma.validator<Prisma.OrderOrderByWithRelationInput>()({
-        id: 'asc',
-      });
-
       const woltOrders = await this.woltService.getOrderByStatus(
         orderingToken,
         status,
         businessOrderingIds,
         orderBy,
       );
-
-      const allOrders = [...woltOrders, ...formattedOrderingOrders];
-      const sortedOrders = allOrders.sort((a, b) => {
-        const dateA = new Date(a.createdAt);
-        const dateB = new Date(b.createdAt);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-      return sortedOrders;
+      allOrders.push(...woltOrders);
     }
 
-    return formattedOrderingOrders;
+    if (provider.includes(ProviderEnum.Foodora)) {
+      const foodoraOrders = await this.foodoraService.getOrderByStatus(
+        orderingToken,
+        status,
+        businessOrderingIds,
+      );
+      allOrders.push(...foodoraOrders);
+    }
+
+    return this.sortOrders(allOrders);
+  }
+
+  private async fetchOrderingOrders(
+    orderingToken: string,
+    status: AvailableOrderStatus[],
+    businessOrderingIds: string[],
+  ): Promise<OrderResponse[]> {
+    const orderingOrders = await this.orderingService.getOrderByStatus(
+      orderingToken,
+      status,
+      businessOrderingIds,
+    );
+
+    return Promise.all(
+      orderingOrders.map(async (order) => {
+        this.logger.log(
+          `Success in retrieving order for ${order.business.name} with status ${order.status}`,
+        );
+        return this.orderingOrderMapperService.mapOrderToOrderResponse(order);
+      }),
+    );
   }
 
   async getOrderById(orderId: string, orderingUserId: number) {
