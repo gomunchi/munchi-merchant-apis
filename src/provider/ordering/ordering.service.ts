@@ -122,7 +122,6 @@ export class OrderingService implements ProviderService {
       const { result: order } = (await axios.request(options)).data;
 
       const { result: customer } = await this.getUser('', order.customer_id, this.orderingApiKey);
-      // console.log("🚀 ~ OrderingService ~ customer:", customer)
 
       const updatedOrder: OrderingOrder = {
         ...order,
