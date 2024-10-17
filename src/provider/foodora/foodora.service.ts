@@ -315,7 +315,15 @@ export class FoodoraService implements ProviderService {
       return null;
     }
 
-    return order;
+    const transformedOrder: FoodoraOrder = {
+      ...order,
+      products: order.products.map(product => ({
+        ...product,
+        quantity: product.quantity.toString(),
+      })),
+    };
+  
+    return transformedOrder;
   }
 
   async getOrderByStatus(

@@ -37,6 +37,8 @@ export interface FoodoraCustomer {
   firstName?: string;
   lastName?: string;
   mobilePhone?: string;
+  name: string;
+  phone: string;
   code?: string;
   id?: string;
   mobilePhoneCountryCode?: string;
