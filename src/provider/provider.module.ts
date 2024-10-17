@@ -15,6 +15,7 @@ import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
 import { WoltWebhookService } from './wolt/wolt-webhook';
 import { FoodoraOrderMapperService } from './foodora/foodora-order-mapper';
 import { FoodoraWebhookService } from './foodora/foodora-webhook.service';
+import { FoodoraMenuMapperService } from './foodora/foodora-menu-mapper';
 
 @Module({
   providers: [
@@ -36,6 +37,7 @@ import { FoodoraWebhookService } from './foodora/foodora-webhook.service';
     FoodoraService,
     FoodoraOrderMapperService,
     FoodoraWebhookService,
+    FoodoraMenuMapperService,
     {
       provide: `${ProviderEnum.Munchi}Service`,
       useClass: OrderingService,
@@ -60,6 +62,7 @@ import { FoodoraWebhookService } from './foodora/foodora-webhook.service';
     WoltSyncService,
     WoltWebhookService,
     FoodoraWebhookService,
+    FoodoraMenuMapperService,
   ],
 })
 export class ProviderModule {}
