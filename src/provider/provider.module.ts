@@ -34,10 +34,14 @@ import { FoodoraMenuMapperService } from './foodora/foodora-menu-mapper';
     WoltSyncService,
     WoltWebhookService,
     // Foodora Services
-    FoodoraService,
     FoodoraOrderMapperService,
     FoodoraWebhookService,
     FoodoraMenuMapperService,
+    FoodoraService,
+    {
+      provide: `${ProviderEnum.Foodora}Service`,
+      useClass: FoodoraService,
+    },
     {
       provide: `${ProviderEnum.Munchi}Service`,
       useClass: OrderingService,

@@ -200,7 +200,7 @@ export class FoodoraService implements ProviderService {
   async getOrdersIds(
     chainCode: string,
     status: 'cancelled' | 'accepted',
-    pastNumberOfHours: number = 24,
+    pastNumberOfHours = 24,
     vendorId?: string,
   ): Promise<GetOrdersIdsResponse> {
     const accessToken = await this.foodoraLogin();

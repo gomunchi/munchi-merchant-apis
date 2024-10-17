@@ -23,6 +23,7 @@ import { ErrorHandlingModule } from 'src/error-handling/error-handling.module';
 import { SocketModule } from 'src/socket/socket.module';
 import { QueueModule } from 'src/queue/queue.module';
 import { RestolutionModule } from 'src/provider/restolution/restolution.module';
+import { OrderTrackingModule } from 'src/order-tracking/order-tracking.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { RestolutionModule } from 'src/provider/restolution/restolution.module';
     UserModule,
     WebhookModule,
     SocketModule,
+    OrderTrackingModule,
     AuthModule,
     ReportModule,
     HistoryModule,

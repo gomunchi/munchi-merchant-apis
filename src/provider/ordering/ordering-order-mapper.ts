@@ -64,6 +64,8 @@ export class OrderingOrderMapperService {
       orderingOrder.customer.lastname ? orderingOrder.customer.lastname : 'User'
     }`;
 
+    const cellphone = orderingOrder.customer.cellphone || orderingOrder.customer.phone;
+
     return {
       id: orderingOrder.id.toString(),
       orderId: orderingOrder.id.toString(),
@@ -85,7 +87,7 @@ export class OrderingOrderMapperService {
       },
       customer: {
         name: userName,
-        phone: orderingOrder.customer.cellphone,
+        phone: cellphone,
       },
       deliveryEta: deliveryDatetime,
       pickupEta: null,
