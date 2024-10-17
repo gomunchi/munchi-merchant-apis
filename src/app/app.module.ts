@@ -22,6 +22,7 @@ import { MenuModule } from 'src/menu/menu.module';
 import { ErrorHandlingModule } from 'src/error-handling/error-handling.module';
 import { SocketModule } from 'src/socket/socket.module';
 import { QueueModule } from 'src/queue/queue.module';
+import { RestolutionModule } from 'src/provider/restolution/restolution.module';
 import { OrderTrackingModule } from 'src/order-tracking/order-tracking.module';
 
 @Module({
@@ -58,6 +59,7 @@ import { OrderTrackingModule } from 'src/order-tracking/order-tracking.module';
     HistoryModule,
     NotificationModule,
     CustomScheduleModule,
+    RestolutionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

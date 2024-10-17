@@ -25,10 +25,13 @@ import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora
 import {
   AvailabilityStatusResponse,
   CloseRestaurantDto,
+  FoodoraOrderPrismaSelectArgs,
   OpenRestaurantDto,
 } from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
 import { FoodoraOrderMapperService } from './foodora-order-mapper';
+import { FoodoraMenuMapperService } from './foodora-menu-mapper';
+import { MunchiMenu } from './dto/munchi-menu.dto';
 
 @Injectable()
 export class FoodoraService implements ProviderService {
@@ -44,6 +47,7 @@ export class FoodoraService implements ProviderService {
     private readonly utilsService: UtilsService,
     private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly foodoraOrderMapperService: FoodoraOrderMapperService,
+    private readonly foodoraMenuMapperService: FoodoraMenuMapperService,
   ) {
     this.foodoraApiUrl = this.configService.get('FOODORA_API_URL');
     this.foodoraUsername = this.configService.get('FOODORA_AUTH_USERNAME');
@@ -144,14 +148,6 @@ export class FoodoraService implements ProviderService {
     const accessToken = await this.foodoraLogin();
 
     try {
-      // TODO - how to chacge only one restaurant's status ???
-
-      // const availabilityStatus: AvailabilityStatusResponse[] =
-      //   await this.getFoodoraAvailabilityStatus(chainCode, posVendorId);
-
-      // if (availabilityStatus.availabilityState === PosAvailabilityState.OPEN) {
-      //   throw new HttpException('Restaurant is already open', HttpStatus.FORBIDDEN);
-      // }
       const { platformKey, platformRestaurantId } = data;
       await axios.put(
         `${this.foodoraApiUrl}/v2/chains/${chainCode}/remoteVendors/${posVendorId}/availability`,
@@ -180,18 +176,6 @@ export class FoodoraService implements ProviderService {
     const accessToken = await this.foodoraLogin();
 
     try {
-      // TODO - how to chacge only one restaurant's status ???
-
-      // const availabilityStatus: AvailabilityStatusResponse[] =
-      //   await this.getFoodoraAvailabilityStatus(chainCode, posVendorId);
-
-      // if (
-      //   availabilityStatus.availabilityState === PosAvailabilityState.CLOSED ||
-      //   availabilityStatus.availabilityState === PosAvailabilityState.CLOSED_UNTIL
-      // ) {
-      //   throw new HttpException('Restaurant is already closed', HttpStatus.FORBIDDEN);
-      // }
-
       const { closedReason, closingMinutes, platformKey, platformRestaurantId } = data;
       await axios.put(
         `${this.foodoraApiUrl}/v2/chains/${chainCode}/remoteVendors/${posVendorId}/availability`,
@@ -215,7 +199,6 @@ export class FoodoraService implements ProviderService {
   }
 
   async getOrdersIds(
-    chainCode: string,
     status: 'cancelled' | 'accepted',
     pastNumberOfHours = 24,
     vendorId?: string,
@@ -230,7 +213,7 @@ export class FoodoraService implements ProviderService {
       });
 
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/orders/ids?${queryParams.toString()}`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/ids?${queryParams.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -241,19 +224,19 @@ export class FoodoraService implements ProviderService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Error getting order identifiers for chain ${chainCode} with status ${status} and vendorId ${vendorId}`,
+        `Error getting order identifiers for chain ${process.env.MUNCHI_CHAINCODE} with status ${status} and vendorId ${vendorId}`,
         error,
       );
       throw new HttpException('Failed to get order identifiers', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async getOrderDetails(chainCode: string, orderId: string): Promise<FoodoraOrder> {
+  async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
     const accessToken = await this.foodoraLogin();
 
     try {
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/orders/${orderId}`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -264,33 +247,75 @@ export class FoodoraService implements ProviderService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Error getting order details for chain ${chainCode} and order ID ${orderId}`,
+        `Error getting order details for chain ${process.env.MUNCHI_CHAINCODE} and order ID ${orderId}`,
         error,
       );
       throw new HttpException('Failed to get order details', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async submitCatalog(chainCode: string, catalogImportDto: CatalogImportDto): Promise<void> {
+  async submitCatalog(catalogImportDto: any): Promise<void> {
     const accessToken = await this.foodoraLogin();
 
     try {
-      await axios.post(`${this.foodoraApiUrl}/v2/chains/${chainCode}/catalog`, catalogImportDto, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+      const response = await axios.put(
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/catalog`,
+        catalogImportDto,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
         },
-      });
-      this.logger.log(`Catalog submitted successfully for chain ${chainCode}`);
+      );
+      this.logger.log(`Catalog submitted successfully for chain ${process.env.MUNCHI_CHAINCODE}`);
+      return response.data;
     } catch (error) {
-      this.logger.error(`Error submitting catalog for chain ${chainCode}`, error);
+      this.logger.error(`Error submitting catalog for chain ${process.env.MUNCHI_CHAINCODE}`, error);
       throw new HttpException('Failed to submit catalog', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async getOrderById(credentials: string, id: string): Promise<FoodoraOrder> {
-    const chainCode = credentials || 'munchi';
-    return this.getOrderDetails(chainCode, id);
+  async getCatalogLogs(chainCode: string, vendorId: number): Promise<void> {
+    const accessToken = await this.foodoraLogin();
+
+    try {
+      const response = await axios.get(
+        `${this.foodoraApiUrl}/v2/chains/${chainCode}/vendors/${vendorId}/menu-import-logs?limit=5`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error(
+        `Error getting catalog logs for chain ${chainCode} and vendor ${vendorId}`,
+        error,
+      );
+      throw new HttpException('Failed to get catalog logs', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  async getOrderById(id: string): Promise<FoodoraOrder> {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId)) {
+      throw new BadRequestException('Invalid order ID: must be an integer');
+    }
+
+    const order = await this.prismaService.order.findUnique({
+      where: {
+        id: parsedId,
+      },
+      include: FoodoraOrderPrismaSelectArgs,
+    });
+
+    if (!order) {
+      return null;
+    }
+
+    return order;
   }
 
   async getOrderByStatus(
@@ -300,10 +325,10 @@ export class FoodoraService implements ProviderService {
   ): Promise<OrderResponse[]> {
     let orderIds = [];
     if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
-      const acceptedOrders = await this.getOrdersIds('munchi', 'accepted');
+      const acceptedOrders = await this.getOrdersIds('accepted');
       orderIds = acceptedOrders.orderIdentifiers;
     } else if (status.includes(OrderStatusEnum.REJECTED)) {
-      const cancelledOrders = await this.getOrdersIds('munchi', 'cancelled');
+      const cancelledOrders = await this.getOrdersIds('cancelled');
       orderIds = cancelledOrders.orderIdentifiers;
     } else {
       throw new BadRequestException('Foodora does not support this order status');
@@ -311,7 +336,7 @@ export class FoodoraService implements ProviderService {
 
     const orders = await Promise.all(
       orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails('munchi', orderId);
+        const order = await this.getOrderDetails(orderId);
         return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
       }),
     );
@@ -325,7 +350,6 @@ export class FoodoraService implements ProviderService {
     orderData: Omit<OrderData, 'provider'>,
     providerInfo?: Provider,
   ): Promise<OrderingOrder | OrderResponse> {
-    // TODO - implement update order for specific business
     if (
       orderData.orderStatus !== OrderStatusEnum.PENDING &&
       orderData.orderStatus !== OrderStatusEnum.REJECTED &&
@@ -340,13 +364,18 @@ export class FoodoraService implements ProviderService {
       throw new ForbiddenException('Foodora does not support updating preparedIn or reason');
     }
 
-    if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
-      await this.markFoodoraOrderAsPrepared(orderId);
-    } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
-      await this.rejectOrder(orderingUserId, orderId, { reason: 'Order rejected' }, providerInfo);
+    try {
+      if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
+        await this.markFoodoraOrderAsPrepared(orderId);
+      } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
+        await this.rejectOrder(orderingUserId, orderId, { reason: 'Order rejected' }, providerInfo);
+      }
+    } catch (error) {
+      this.logger.error(`Error updating Foodora order ${orderId}`, error);
+      throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails('munchi', orderId);
+    const order = await this.getOrderDetails(orderId);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
@@ -356,12 +385,44 @@ export class FoodoraService implements ProviderService {
     orderRejectData: { reason: string },
     providerInfo?: Provider,
   ): Promise<OrderingOrder | OrderResponse> {
-    const response = await this.updateFoodoraOrderStatus(orderId, {
-      status: FoodoraOrderStatus.Rejected,
-      reason: orderRejectData.reason,
-    });
+    try {
+      const response = await this.updateFoodoraOrderStatus(orderId, {
+        status: FoodoraOrderStatus.Rejected,
+        reason: orderRejectData.reason,
+      });
+    } catch (error) {
+      this.logger.error(`Error rejecting Foodora order ${orderId}`, error);
+      throw new HttpException('Failed to reject Foodora order', HttpStatus.BAD_REQUEST);
+    }
 
-    const order = await this.getOrderDetails('munchi', orderId);
+    const order = await this.getOrderDetails(orderId);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
+  }
+
+  async getMunchiMenu(): Promise<MunchiMenu> {
+    try {
+      const response = await axios.get(
+        'https://apiv4.ordering.co/v400/en/peperoni/business/351?mode=dashboard',
+        {
+          headers: {
+            'x-api-key': process.env.MUNCHI_ORDERING_API_KEY,
+            Accept: 'application/json',
+          },
+        },
+      );
+      return response.data;
+    } catch (error) {
+      this.logger.error('Error getting Munchi menu', error);
+      throw new HttpException('Failed to get Munchi menu', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  async syncMunchiMenu(): Promise<any> {
+    const munchiMenu = await this.getMunchiMenu();
+
+    const mappedMenu = await this.foodoraMenuMapperService.mapMenuToCatalogImportDto(munchiMenu);
+
+    const result = await this.submitCatalog( mappedMenu);
+    return mappedMenu;
   }
 }

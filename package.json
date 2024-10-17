@@ -54,6 +54,7 @@
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.43",
     "nestjs-pino": "^3.4.0",
+    "node-cache": "^5.1.2",
     "order": "^0.1.0",
     "ordering-api-sdk": "github:sergioaok/ordering-api-sdk",
     "passport": "^0.6.0",

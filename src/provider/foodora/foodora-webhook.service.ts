@@ -20,7 +20,7 @@ export class FoodoraWebhookService {
 
     //TODO: Implement the logic to send the order to the business
 
-    const ackResult = await this.socketService.emitWithAcknowledgement({
+    const askResult = await this.socketService.emitWithAcknowledgement({
       room: business.orderingBusinessId || '', // none
       event: 'orders_register',
       data: formattedWoltOrder,
@@ -30,8 +30,8 @@ export class FoodoraWebhookService {
       retryDelay: 2000, // 2 seconds, will increase with each retry
     });
 
-    if (ackResult.received) {
-      this.logger.log(`New Wolt order registered and acknowledged: ${ackResult.message}`);
+    if (askResult.received) {
+      this.logger.log(`New Wolt order registered and acknowledged: ${askResult.message}`);
     } else {
       this.logger.warn(
         `No acknowledgement received for new Wolt order ${formattedWoltOrder.orderNumber}`,
