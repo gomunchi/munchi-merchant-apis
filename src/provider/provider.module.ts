@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { OrderingOrderMapperService } from './ordering/ordering-order-mapper';
 import { OrderingRepositoryService } from './ordering/ordering-repository';
 import { OrderingSyncService } from './ordering/ordering-sync';
@@ -15,8 +15,10 @@ import { WoltMenuMapperService } from './wolt/wolt-menu-mapper';
 import { WoltWebhookService } from './wolt/wolt-webhook';
 import { FoodoraOrderMapperService } from './foodora/foodora-order-mapper';
 import { FoodoraWebhookService } from './foodora/foodora-webhook.service';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [forwardRef(() => AuthModule)],
   providers: [
     ProviderManagmentService,
     // Ordering Services

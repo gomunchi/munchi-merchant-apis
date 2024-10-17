@@ -27,11 +27,13 @@ export class ApiKeyService {
         name: {
           contains: name,
         },
-        OR: {
-          value: {
-            equals: value,
+        OR: [
+          {
+            value: {
+              equals: value,
+            },
           },
-        },
+        ],
       },
     });
 

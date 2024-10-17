@@ -8,12 +8,14 @@ import { UtilsService } from 'src/utils/utils.service';
 import { AvailableOrderStatus, OrderStatusEnum } from './dto/order.dto';
 import { OrderRejectData } from './validation/order.validation';
 import { ProviderEnum } from 'src/provider/provider.type';
+import { SessionService } from 'src/auth/session.service';
 
 @Injectable()
 export class OrderService {
   constructor(
     private readonly providerManagementService: ProviderManagmentService,
     private readonly utils: UtilsService,
+    private readonly sessionService: SessionService,
     private readonly businessService: BusinessService,
     private readonly prismaService: PrismaService,
   ) {}
@@ -44,7 +46,7 @@ export class OrderService {
     //Format business data to array of business ordering ids
     const businessIds = businesses.map((b) => b.orderingBusinessId);
 
-    const accessToken = await this.utils.getOrderingAccessToken(orderingUserId);
+    const accessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     // Get order by filtering provider, status and businessIds
     const order = await this.providerManagementService.getOrderByStatus(
@@ -82,6 +84,7 @@ export class OrderService {
       throw new NotFoundException('No provider found');
     }
 
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
     const businesses = await this.businessService.getBusinessInSession(sessionPublicId);
 
     try {
@@ -95,6 +98,9 @@ export class OrderService {
           preparedIn: orderData.preparedIn,
         },
         businesses,
+        {
+          accessToken: orderingAccessToken,
+        },
       );
 
       return order;
@@ -121,6 +127,8 @@ export class OrderService {
       throw new NotFoundException('No provider found');
     }
 
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
+
     const businesses = await this.businessService.getBusinessInSession(sessionPublicId);
 
     try {
@@ -132,6 +140,9 @@ export class OrderService {
           reason: orderRejectData.reason,
         },
         businesses,
+        {
+          accessToken: orderingAccessToken,
+        },
       );
     } catch (error) {
       this.utils.logError(error);

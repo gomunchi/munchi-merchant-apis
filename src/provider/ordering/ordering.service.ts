@@ -38,6 +38,7 @@ export class OrderingService implements ProviderService {
     private readonly orderingOrderMapperService: OrderingOrderMapperService,
     private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly orderingSyncService: OrderingSyncService,
+
     private readonly woltService: WoltService,
     private readonly errorHandlingService: ErrorHandlingService,
     private eventEmitter: EventEmitter2,
@@ -352,8 +353,9 @@ export class OrderingService implements ProviderService {
     orderingUserId: number,
     orderId: string,
     orderData: Omit<OrderData, 'provider'>,
+    extraData: any,
   ): Promise<OrderResponse> {
-    const accessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const { accessToken } = extraData;
 
     const orderingOrder = await this.getOrderById(accessToken, orderId);
 
@@ -410,8 +412,9 @@ export class OrderingService implements ProviderService {
     orderRejectData: {
       reason: string;
     },
+    extraData: any,
   ): Promise<OrderResponse> {
-    const accessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const { accessToken } = extraData;
 
     const options = {
       method: 'PUT',

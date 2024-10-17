@@ -222,11 +222,13 @@ export class WoltService implements ProviderService {
     orderingUserId: number,
     woltOrderId: string,
     { orderStatus, preparedIn }: Omit<OrderData, 'provider'>,
-    providerInfo: Provider,
+    extraData,
   ): Promise<any> {
     this.logger.log(
       `Updating order: ${woltOrderId}, Status: ${orderStatus}, PreparedIn: ${preparedIn}`,
     );
+
+    const { providerInfo } = extraData;
 
     const venueId = providerInfo.id;
     const woltCredentials = await this.getWoltCredentials(venueId, 'order');
@@ -360,8 +362,10 @@ export class WoltService implements ProviderService {
     orderRejectData: {
       reason: string;
     },
-    providerInfo: Provider,
+    extraData: any,
   ): Promise<any> {
+    const { providerInfo } = extraData;
+
     const woltVenueId = providerInfo.id;
 
     const order = await this.woltRepositoryService.getOrderByIdFromDb(orderId);

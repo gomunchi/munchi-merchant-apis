@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Business, BusinessProviders, MenuTracking, Prisma, Provider } from '@prisma/client';
@@ -16,6 +23,7 @@ import {
 import { AvailableProvider, ProviderEnum } from './provider.type';
 import { WoltRepositoryService } from './wolt/wolt-repository';
 import { WoltService } from './wolt/wolt.service';
+import { SessionService } from 'src/auth/session.service';
 
 @Injectable()
 export class ProviderManagmentService {
@@ -29,6 +37,7 @@ export class ProviderManagmentService {
     private orderingOrderMapperService: OrderingOrderMapperService,
     private prismaService: PrismaService,
     private eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => SessionService)) private sessionService: SessionService,
   ) {}
   private readonly logger = new Logger(ProviderManagmentService.name);
 
@@ -97,6 +106,7 @@ export class ProviderManagmentService {
         orderingToken,
         status,
         businessOrderingIds,
+        orderBy,
       );
       allOrders.push(...foodoraOrders);
     }
@@ -130,7 +140,7 @@ export class ProviderManagmentService {
     const woltOrder = await this.woltRepositoryService.getOrderByIdFromDb(orderId);
 
     if (!woltOrder) {
-      const accessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+      const accessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
       const orderingOrder = await this.orderingService.getOrderById(accessToken, orderId);
       const mapToOrderResponse = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         orderingOrder,
@@ -151,6 +161,9 @@ export class ProviderManagmentService {
       preparedIn: string;
     },
     businesses: unknown,
+    extraData?: {
+      accessToken: string;
+    },
   ) {
     if (!businesses || !Array.isArray(businesses) || businesses.length === 0) {
       throw new BadRequestException(
@@ -160,7 +173,9 @@ export class ProviderManagmentService {
 
     // Default provider
     if (provider === ProviderEnum.Munchi) {
-      return this.orderingService.updateOrder(orderingUserId, orderId, updateData);
+      return this.orderingService.updateOrder(orderingUserId, orderId, updateData, {
+        accessToken: extraData.accessToken,
+      });
     }
 
     //Check business from order data
@@ -191,8 +206,18 @@ export class ProviderManagmentService {
       reason: string;
     },
     businesses: unknown,
+    extraData?: {
+      accessToken: string;
+    },
   ) {
     this.eventEmitter.emit('preorderQueue.validate', orderId);
+
+    // Default provider
+    if (provider === ProviderEnum.Munchi) {
+      return this.orderingService.rejectOrder(orderingUserId, orderId, orderRejectData, {
+        accessToken: extraData.accessToken,
+      });
+    }
 
     const order = await this.getOrderById(orderId, orderingUserId);
 

@@ -1,12 +1,10 @@
-import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import moment from 'moment';
-import { SessionService } from 'src/auth/session.service';
 
 import { PrismaService } from 'src/prisma/prisma.service';
-import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { OrderingUser } from 'src/provider/ordering/ordering.type';
-import { UtilsService } from 'src/utils/utils.service';
+import { getPassword } from './utils';
 
 type UserInfoSelectBase = {
   id: true;
@@ -15,12 +13,7 @@ type UserInfoSelectBase = {
 
 @Injectable()
 export class UserService {
-  constructor(
-    private prismaService: PrismaService,
-    @Inject(forwardRef(() => UtilsService)) private readonly utils: UtilsService,
-    @Inject(forwardRef(() => SessionService)) private readonly sessionService: SessionService,
-    @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
-  ) {}
+  constructor(private prismaService: PrismaService) {}
 
   getUserInternally = async (orderingUserId: number, publicUserId: string) => {
     if (orderingUserId === null) {
@@ -95,7 +88,7 @@ export class UserService {
       orderingAccessTokenExpiredAt: expiredAt.format(),
       email: userInfo.email,
       level: userInfo.level,
-      hash: this.utils.getPassword(userInfo.password, true),
+      hash: getPassword(userInfo.password, true),
     };
 
     return await this.prismaService.user.upsert({

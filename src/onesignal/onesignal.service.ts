@@ -15,9 +15,9 @@ export class OneSignalService {
 
   constructor(private readonly configService: ConfigService) {
     const configuration = createConfiguration({
-      appKey: this.configService.get<string>('ONE_SIGNAL_APP_ID'),
+      restApiKey: this.configService.get<string>('ONE_SIGNAL_APP_ID'),
       authMethods: {
-        app_key: {
+        rest_api_key: {
           tokenProvider: {
             getToken() {
               return configService.get<string>('ONE_SIGNAL_REST_API_TOKEN');
@@ -45,7 +45,7 @@ export class OneSignalService {
 
   async pushOpenAppNotification(playerIds: string[], language = 'en') {
     const notification = this.createNotification({
-      include_player_ids: playerIds,
+      include_subscription_ids: playerIds,
       android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
       template_id: PushNotificationTemplate.OPEN_APP_REMINDER,
     });
@@ -61,7 +61,7 @@ export class OneSignalService {
 
   async pushPreorderNotification(playerIds: string[], orderNumber: string) {
     const notification = this.createNotification({
-      include_player_ids: playerIds,
+      include_subscription_ids: playerIds,
       android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
       template_id: PushNotificationTemplate.PREORDER_REMINDER,
       data: {
@@ -80,7 +80,7 @@ export class OneSignalService {
 
   async pushNewOrderNotification(playerIds: string[], order?: OrderResponse) {
     const notification = this.createNotification({
-      include_player_ids: playerIds,
+      include_subscription_ids: playerIds,
       android_channel_id: PushNotificationChannel.NEW_MERCHANT_APP_CHANNEL,
       template_id: PushNotificationTemplate.NEW_ORDER_REMINDER,
     });

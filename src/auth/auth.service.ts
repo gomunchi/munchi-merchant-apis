@@ -17,9 +17,7 @@ export class AuthService {
     @Inject(forwardRef(() => UserService)) private user: UserService,
     @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
     @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
-    @Inject(forwardRef(() => SessionService)) private readonly sessionService: SessionService,
-    private config: ConfigService,
-    private readonly prisma: PrismaService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async signIn(credentials: AuthCredentials) {
@@ -87,7 +85,7 @@ export class AuthService {
    * @param sessionPublicId
    */
   async signOut(sessionPublicId: string) {
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgs>()({
       select: {
         id: true,
         refreshToken: true,
@@ -103,7 +101,9 @@ export class AuthService {
       Prisma.SessionGetPayload<typeof findSessionArgs>
     >(sessionPublicId, findSessionArgs);
 
-    const accessToken = await this.utils.getOrderingAccessToken(session.user.orderingUserId);
+    const accessToken = await this.sessionService.getOrderingAccessToken(
+      session.user.orderingUserId,
+    );
     await this.orderingService.signOut(accessToken);
     await this.sessionService.deleteSession({
       publicId: sessionPublicId,

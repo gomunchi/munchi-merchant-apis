@@ -16,19 +16,19 @@ import { OrderingService } from 'src/provider/ordering/ordering.service';
 import { ReportAppBusinessDto } from 'src/report/dto/report.dto';
 import { AuthCredentials } from 'src/type';
 import { UserService } from 'src/user/user.service';
-import { UtilsService } from 'src/utils/utils.service';
 import { JwtTokenPayload } from './session.type';
+import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
+import { getPassword } from 'src/user/utils';
 
 @Injectable()
 export class SessionService {
   constructor(
-    @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
+    @Inject(forwardRef(() => OrderingService)) private readonly orderingService: OrderingService,
     @Inject(forwardRef(() => UserService)) private userService: UserService,
-    @Inject(forwardRef(() => OrderingService))
-    private readonly orderingService: OrderingService,
     private readonly jwt: JwtService,
     private config: ConfigService,
     private readonly prismaService: PrismaService,
+    private readonly errorHandlingService: ErrorHandlingService,
   ) {}
 
   async hashData(data: string) {
@@ -56,7 +56,7 @@ export class SessionService {
    * @returns
    */
   async refreshTokens(refreshToken: string, sessionPublicId: string) {
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgs>()({
       select: {
         id: true,
         refreshToken: true,
@@ -150,7 +150,7 @@ export class SessionService {
   }
 
   async getSessionByPublicId<T>(publicId: string, args?): Promise<T> {
-    let findArgs: Prisma.SessionFindUniqueArgsBase = {
+    let findArgs: Prisma.SessionFindUniqueArgs = {
       where: {
         publicId: publicId,
       },
@@ -287,7 +287,7 @@ export class SessionService {
 
   async setSessionOnlineStatus(sessionPublicId: string, isOnline: boolean) {
     // TODO: Create general type instead of create seperately
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgs>()({
       select: {
         id: true,
         publicId: true,
@@ -322,7 +322,7 @@ export class SessionService {
     reportAppBusinessDto: ReportAppBusinessDto,
   ): Promise<void> {
     // TODO: Create general type instead of create seperately
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgs>()({
       select: {
         id: true,
         refreshToken: true,
@@ -514,5 +514,53 @@ export class SessionService {
     });
 
     return 'Delete sessions successfully';
+  }
+
+  /**
+   * Get access token from user table
+   *
+   * @param publicUserId
+   * @returns
+   */
+
+  async getOrderingAccessToken(orderingUserId: number) {
+    const selectArg = Prisma.validator<Prisma.UserSelect>()({
+      hash: true,
+      orderingAccessTokenExpiredAt: true,
+      orderingAccessToken: true,
+      email: true,
+      orderingUserId: true,
+    });
+
+    let user = await this.userService.getUserByOrderingUserId<typeof selectArg>(
+      orderingUserId,
+      selectArg,
+    );
+
+    if (!user) {
+      throw new ForbiddenException('Access Denied');
+    }
+
+    const decryptedPassword = getPassword(user.hash, false);
+
+    try {
+      // Try to use accesstoken to get user key if no success, login again for new token
+      await this.orderingService.getUserKey(user.orderingAccessToken, user.orderingUserId);
+    } catch (error) {
+      try {
+        await this.updateOrderingAccessToken({
+          email: user.email,
+          password: decryptedPassword,
+        });
+        user = await this.userService.getUserByOrderingUserId<typeof selectArg>(
+          orderingUserId,
+          selectArg,
+        );
+      } catch (error) {
+        this.errorHandlingService.handleError(error, 'Error when getting ordering access token');
+      }
+    }
+
+    return user.orderingAccessToken;
   }
 }

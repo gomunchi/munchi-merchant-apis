@@ -149,7 +149,7 @@ export class BusinessService {
   }
 
   async getBusinessInSession(sessionPublicId: string) {
-    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgsBase>()({
+    const findSessionArgs = Prisma.validator<Prisma.SessionFindFirstArgs>()({
       select: {
         businesses: {
           select: {
@@ -189,7 +189,7 @@ export class BusinessService {
   }
 
   async businessOwnershipService(orderingId: number): Promise<BusinessDto[]> {
-    const accessToken = await this.utils.getOrderingAccessToken(orderingId);
+    const accessToken = await this.sessionService.getOrderingAccessToken(orderingId);
     const response = await this.orderingService.getAllBusiness(accessToken);
     const mappedBusiness = plainToInstance(OrderingBusiness, response);
     const user = await this.userService.getUserInternally(orderingId, null);
@@ -234,7 +234,7 @@ export class BusinessService {
   }
 
   async getOrderingBusiness(orderingUserId: number, publicBusinessId: string) {
-    const accessToken = await this.utils.getOrderingAccessToken(orderingUserId);
+    const accessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
     const business = await this.findBusinessByPublicId(publicBusinessId);
     if (!business) {
       throw new ForbiddenException(`we need this: ${publicBusinessId}`);
@@ -316,7 +316,7 @@ export class BusinessService {
       const { schedule, timezone } = orderingBusiness;
       const numberOfToday = moment().tz(timezone).weekday();
       schedule[numberOfToday].enabled = status;
-      const accessToken = await this.utils.getOrderingAccessToken(user.orderingUserId);
+      const accessToken = await this.sessionService.getOrderingAccessToken(user.orderingUserId);
       const response = await this.orderingService.editBusiness(accessToken, orderingBusiness.id, {
         schedule: JSON.stringify(schedule),
       });

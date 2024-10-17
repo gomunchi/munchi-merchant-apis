@@ -19,7 +19,10 @@ export abstract class ProviderService {
     orderingUserId: number,
     orderId: string,
     orderData: Omit<OrderData, 'provider'>,
-    providerInfor?: Provider,
+    extraData?: {
+      providerInfor?: Provider;
+      accessToken?: string;
+    },
   ): Promise<OrderingOrder | OrderResponse>;
 
   abstract rejectOrder(
@@ -28,6 +31,9 @@ export abstract class ProviderService {
     orderRejectData: {
       reason: string;
     },
-    providerInfor?: Provider,
+    extraData?: {
+      providerInfor?: Provider;
+      accessToken?: string;
+    },
   ): Promise<OrderingOrder | OrderResponse>;
 }

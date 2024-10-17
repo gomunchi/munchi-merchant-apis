@@ -24,6 +24,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import moment from 'moment';
 import { MenuDataProcessorService } from './menu-process.service';
+import { SessionService } from 'src/auth/session.service';
 
 @Injectable()
 export class MenuService {
@@ -33,6 +34,7 @@ export class MenuService {
     private orderingMenuMapperService: OrderingMenuMapperService,
     private woltMenuMapperService: WoltMenuMapperService,
     private menuDataProcessService: MenuDataProcessorService,
+    private sessionService: SessionService,
     private woltService: WoltService,
     private prismaService: PrismaService,
     private businessService: BusinessService,
@@ -41,7 +43,7 @@ export class MenuService {
   ) {}
   async getMenuCategory(orderingUserId: number, publicBusinessId: string) {
     // Get access token
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     //Get business by public id
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
@@ -77,7 +79,7 @@ export class MenuService {
 
   // TODO: Need checking when option bind is only one
   async getWoltMenuCategory(orderingUserId: number, publicBusinessId: string) {
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     //Get business by public id
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
@@ -141,7 +143,7 @@ export class MenuService {
 
   async getBusinessProduct(orderingUserId: number, publicBusinessId: string) {
     // Get access token
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
@@ -162,7 +164,7 @@ export class MenuService {
 
   async getBusinessMenuProduct(orderingUserId: number, publicBusinessId: string) {
     // Get access token
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
@@ -180,7 +182,7 @@ export class MenuService {
 
   async getUnavailableBusinessProduct(orderingUserId: number, publicBusinessId: string) {
     // Get access token
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
@@ -200,7 +202,7 @@ export class MenuService {
   }
 
   async getBusinessProductOption(orderingUserId: number, publicBusinessId: string) {
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
@@ -218,7 +220,7 @@ export class MenuService {
 
   async deleteAllCategory(orderingUserId: number, publicBusinessId: string) {
     // Get access token
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(publicBusinessId);
 
@@ -253,7 +255,7 @@ export class MenuService {
     // Extract catgegory data from body
     const { data: categories } = bodyData;
 
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
 
@@ -279,7 +281,7 @@ export class MenuService {
     // Extract catgegory data from body
     const { data: products } = bodyData;
 
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
 
@@ -306,7 +308,7 @@ export class MenuService {
     // Extract catgegory data from body
     const { data: suboptions } = bodyData;
 
-    const orderingAccessToken = await this.utilService.getOrderingAccessToken(orderingUserId);
+    const orderingAccessToken = await this.sessionService.getOrderingAccessToken(orderingUserId);
 
     const business = await this.businessService.findBusinessByPublicId(bodyData.businessPublicId);
 

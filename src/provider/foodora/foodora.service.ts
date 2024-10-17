@@ -29,6 +29,7 @@ import {
 } from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
 import { FoodoraOrderMapperService } from './foodora-order-mapper';
+import { WoltOrderPrismaSelectArgs } from '../wolt/dto/wolt-order.dto';
 
 @Injectable()
 export class FoodoraService implements ProviderService {
@@ -297,24 +298,38 @@ export class FoodoraService implements ProviderService {
     accessToken: string,
     status: AvailableOrderStatus[],
     businessIds: string[],
-  ): Promise<OrderResponse[]> {
-    let orderIds = [];
-    if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
-      const acceptedOrders = await this.getOrdersIds('munchi', 'accepted');
-      orderIds = acceptedOrders.orderIdentifiers;
-    } else if (status.includes(OrderStatusEnum.REJECTED)) {
-      const cancelledOrders = await this.getOrdersIds('munchi', 'cancelled');
-      orderIds = cancelledOrders.orderIdentifiers;
-    } else {
-      throw new BadRequestException('Foodora does not support this order status');
-    }
+    orderBy?: Prisma.OrderOrderByWithRelationInput,
+  ): Promise<any[]> {
+    // let orderIds = [];
+    // if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
+    //   const acceptedOrders = await this.getOrdersIds('munchi', 'accepted');
+    //   orderIds = acceptedOrders.orderIdentifiers;
+    // } else if (status.includes(OrderStatusEnum.REJECTED)) {
+    //   const cancelledOrders = await this.getOrdersIds('munchi', 'cancelled');
+    //   orderIds = cancelledOrders.orderIdentifiers;
+    // } else {
+    //   throw new BadRequestException('Foodora does not support this order status');
+    // }
 
-    const orders = await Promise.all(
-      orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails('munchi', orderId);
-        return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
-      }),
-    );
+    // const orders = await Promise.all(
+    //   orderIds.map(async (orderId) => {
+    //     const order = await this.getOrderDetails('munchi', orderId);
+    //     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
+    //   }),
+    // );
+    const orders = await this.prismaService.order.findMany({
+      where: {
+        status: {
+          in: status,
+        },
+        provider: ProviderEnum.Foodora,
+        orderingBusinessId: {
+          in: businessIds,
+        },
+      },
+      orderBy: orderBy,
+      include: WoltOrderPrismaSelectArgs,
+    });
 
     return orders;
   }
@@ -323,8 +338,13 @@ export class FoodoraService implements ProviderService {
     orderingUserId: number,
     orderId: string,
     orderData: Omit<OrderData, 'provider'>,
-    providerInfo?: Provider,
+    extraData?: {
+      providerInfo?: Provider;
+      accessToken?: string;
+    },
   ): Promise<OrderingOrder | OrderResponse> {
+    const { providerInfo } = extraData;
+
     // TODO - implement update order for specific business
     if (
       orderData.orderStatus !== OrderStatusEnum.PENDING &&
@@ -343,7 +363,14 @@ export class FoodoraService implements ProviderService {
     if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
       await this.markFoodoraOrderAsPrepared(orderId);
     } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
-      await this.rejectOrder(orderingUserId, orderId, { reason: 'Order rejected' }, providerInfo);
+      await this.rejectOrder(
+        orderingUserId,
+        orderId,
+        { reason: 'Order rejected' },
+        {
+          providerInfo: providerInfo,
+        },
+      );
     }
 
     const order = await this.getOrderDetails('munchi', orderId);
@@ -354,7 +381,10 @@ export class FoodoraService implements ProviderService {
     orderingUserId: number,
     orderId: string,
     orderRejectData: { reason: string },
-    providerInfo?: Provider,
+    extraData?: {
+      providerInfo?: Provider;
+      accessToken?: string;
+    },
   ): Promise<OrderingOrder | OrderResponse> {
     const response = await this.updateFoodoraOrderStatus(orderId, {
       status: FoodoraOrderStatus.Rejected,
