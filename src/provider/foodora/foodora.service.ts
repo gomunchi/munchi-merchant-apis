@@ -321,6 +321,11 @@ export class FoodoraService implements ProviderService {
         ...product,
         quantity: product.quantity.toString(),
       })),
+      customer: {
+        firstName: order.customer.name.split(' ')[0],
+        lastName: order.customer.name.split(' ')[1],
+        mobilePhone: order.customer.phone,
+      },
     };
   
     return transformedOrder;
