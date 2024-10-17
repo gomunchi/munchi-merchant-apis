@@ -217,7 +217,6 @@ export class WebhookService {
     const orderId = foodoraWebhookdata.remoteOrderId.split('_').pop();
     const venueId = foodoraWebhookdata.remoteOrderId.split('_')[2];
     const order: FoodoraOrder = await this.foodoraService.getOrderById(
-      'FI-Munchi-test',
       orderId,
     );
 

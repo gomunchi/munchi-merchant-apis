@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 export interface OpenRestaurantDto {
   platformKey: string;
   platformRestaurantId: string;
@@ -22,3 +24,63 @@ export interface AvailabilityStatusResponse {
   platformRestaurantId?: string;
   platformType?: string;
 }
+
+export const FoodoraOrderPrismaSelectArgs = Prisma.validator<Prisma.OrderInclude>()({
+  business: {
+    select: {
+      publicId: true,
+      name: true,
+      logo: true,
+      email: true,
+      phone: true,
+      description: true,
+      timeZone: true,
+    },
+  },
+  customer: {
+    select: {
+      name: true,
+      phone: true,
+    },
+  },
+  offers: true,
+  preorder: {
+    select: {
+      preorderTime: true,
+      status: true,
+    },
+  },
+  products: {
+    select: {
+      productId: true,
+      comment: true,
+      name: true,
+      options: {
+        select: {
+          optionId: true,
+          image: true,
+          price: true,
+          name: true,
+          subOptions: {
+            select: {
+              subOptionId: true,
+              name: true,
+              image: true,
+              price: true,
+              position: true,
+              quantity: true,
+            },
+          },
+        },
+      },
+      price: true,
+      quantity: true,
+    },
+  },
+  summary: {
+    select: {
+      total: true,
+    },
+  },
+});
+

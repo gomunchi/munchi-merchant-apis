@@ -25,6 +25,7 @@ import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora
 import {
   AvailabilityStatusResponse,
   CloseRestaurantDto,
+  FoodoraOrderPrismaSelectArgs,
   OpenRestaurantDto,
 } from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
@@ -198,7 +199,6 @@ export class FoodoraService implements ProviderService {
   }
 
   async getOrdersIds(
-    chainCode: string,
     status: 'cancelled' | 'accepted',
     pastNumberOfHours = 24,
     vendorId?: string,
@@ -213,7 +213,7 @@ export class FoodoraService implements ProviderService {
       });
 
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/orders/ids?${queryParams.toString()}`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/ids?${queryParams.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -224,19 +224,19 @@ export class FoodoraService implements ProviderService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Error getting order identifiers for chain ${chainCode} with status ${status} and vendorId ${vendorId}`,
+        `Error getting order identifiers for chain ${process.env.MUNCHI_CHAINCODE} with status ${status} and vendorId ${vendorId}`,
         error,
       );
       throw new HttpException('Failed to get order identifiers', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async getOrderDetails(chainCode: string, orderId: string): Promise<FoodoraOrder> {
+  async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
     const accessToken = await this.foodoraLogin();
 
     try {
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/orders/${orderId}`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -247,19 +247,19 @@ export class FoodoraService implements ProviderService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Error getting order details for chain ${chainCode} and order ID ${orderId}`,
+        `Error getting order details for chain ${process.env.MUNCHI_CHAINCODE} and order ID ${orderId}`,
         error,
       );
       throw new HttpException('Failed to get order details', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async submitCatalog(chainCode: string, catalogImportDto: any): Promise<void> {
+  async submitCatalog(catalogImportDto: any): Promise<void> {
     const accessToken = await this.foodoraLogin();
 
     try {
       const response = await axios.put(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/catalog`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/catalog`,
         catalogImportDto,
         {
           headers: {
@@ -268,10 +268,10 @@ export class FoodoraService implements ProviderService {
           },
         },
       );
-      this.logger.log(`Catalog submitted successfully for chain ${chainCode}`);
+      this.logger.log(`Catalog submitted successfully for chain ${process.env.MUNCHI_CHAINCODE}`);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error submitting catalog for chain ${chainCode}`, error);
+      this.logger.error(`Error submitting catalog for chain ${process.env.MUNCHI_CHAINCODE}`, error);
       throw new HttpException('Failed to submit catalog', HttpStatus.BAD_REQUEST);
     }
   }
@@ -298,9 +298,24 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async getOrderById(credentials: string, id: string): Promise<FoodoraOrder> {
-    const chainCode = credentials || 'FI-Munchi-test';
-    return this.getOrderDetails(chainCode, id);
+  async getOrderById(id: string): Promise<FoodoraOrder> {
+    const parsedId = Number(id);
+    if (!Number.isInteger(parsedId)) {
+      throw new BadRequestException('Invalid order ID: must be an integer');
+    }
+
+    const order = await this.prismaService.order.findUnique({
+      where: {
+        id: parsedId,
+      },
+      include: FoodoraOrderPrismaSelectArgs,
+    });
+
+    if (!order) {
+      return null;
+    }
+
+    return order;
   }
 
   async getOrderByStatus(
@@ -310,10 +325,10 @@ export class FoodoraService implements ProviderService {
   ): Promise<OrderResponse[]> {
     let orderIds = [];
     if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
-      const acceptedOrders = await this.getOrdersIds('FI-Munchi-test', 'accepted');
+      const acceptedOrders = await this.getOrdersIds('accepted');
       orderIds = acceptedOrders.orderIdentifiers;
     } else if (status.includes(OrderStatusEnum.REJECTED)) {
-      const cancelledOrders = await this.getOrdersIds('FI-Munchi-test', 'cancelled');
+      const cancelledOrders = await this.getOrdersIds('cancelled');
       orderIds = cancelledOrders.orderIdentifiers;
     } else {
       throw new BadRequestException('Foodora does not support this order status');
@@ -321,7 +336,7 @@ export class FoodoraService implements ProviderService {
 
     const orders = await Promise.all(
       orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails('FI-Munchi-test', orderId);
+        const order = await this.getOrderDetails(orderId);
         return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
       }),
     );
@@ -360,7 +375,7 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails('FI-Munchi-test', orderId);
+    const order = await this.getOrderDetails(orderId);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
@@ -380,7 +395,7 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to reject Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails('FI-Munchi-test', orderId);
+    const order = await this.getOrderDetails(orderId);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
@@ -407,7 +422,7 @@ export class FoodoraService implements ProviderService {
 
     const mappedMenu = await this.foodoraMenuMapperService.mapMenuToCatalogImportDto(munchiMenu);
 
-    const result = await this.submitCatalog('FI-Munchi-test', mappedMenu);
+    const result = await this.submitCatalog( mappedMenu);
     return mappedMenu;
   }
 }

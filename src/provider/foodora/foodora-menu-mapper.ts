@@ -13,6 +13,7 @@ import {
   Image,
   Menu,
   MenuType,
+  CatalogItem,
   Product,
   ScheduleEntry,
   Topping,
