@@ -216,18 +216,19 @@ export class WebhookService {
   public async processFoodoraOrder(foodoraWebhookdata: any) {
     const orderId = foodoraWebhookdata.remoteOrderId.split('_').pop();
     const venueId = foodoraWebhookdata.remoteOrderId.split('_')[2];
-    const order: FoodoraOrder = await this.foodoraService.getOrderById(
-      orderId,
-    );
+    const order: FoodoraOrder = await this.foodoraService.getOrderById(orderId);
 
     const business = await this.businessService.findBusinessByWoltVenueId(venueId);
 
     return { order, venueId, business };
   }
 
-  async foodoraOrderNotification(foodoraWebhookdata: any, request: any): Promise<string> {
+  async foodoraOrderNotification(
+    foodoraWebhookdata: any,
+    request: any,
+    remoteId: string,
+  ): Promise<string> {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
-    this.logger.log(`Received Foodora request: ${JSON.stringify(request)}`);
 
     try {
       const { order } = await this.processFoodoraOrder(foodoraWebhookdata.remoteResponse);

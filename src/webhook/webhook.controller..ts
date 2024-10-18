@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req } from '@nestjs/common';
+import { Body, Controller, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 
@@ -25,8 +25,13 @@ export class WebhookController {
     return this.webhookService.woltOrderNotification(woltWebhookdata);
   }
 
-  @Post('foodora/notification')
-  foodoraNewOrder(@Body() foodoraWebhookdata: any, @Req() request: Request) {
-    return this.webhookService.foodoraOrderNotification(foodoraWebhookdata, request);
+  @Post('foodora/notification/order/:remoteId')
+  foodoraNewOrder(
+    @Body() foodoraWebhookdata: any,
+    @Req() request: Request,
+    @Param() remoteId: string,
+  ) {
+    console.log(`Received Foodora request: ${JSON.stringify(request.headers)}`);
+    return this.webhookService.foodoraOrderNotification(foodoraWebhookdata, request, remoteId);
   }
 }
