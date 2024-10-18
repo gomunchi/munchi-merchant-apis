@@ -213,7 +213,9 @@ export class FoodoraService implements ProviderService {
       });
 
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/ids?${queryParams.toString()}`,
+        `${this.foodoraApiUrl}/v2/chains/${
+          process.env.MUNCHI_CHAINCODE
+        }/orders/ids?${queryParams.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -271,7 +273,10 @@ export class FoodoraService implements ProviderService {
       this.logger.log(`Catalog submitted successfully for chain ${process.env.MUNCHI_CHAINCODE}`);
       return response.data;
     } catch (error) {
-      this.logger.error(`Error submitting catalog for chain ${process.env.MUNCHI_CHAINCODE}`, error);
+      this.logger.error(
+        `Error submitting catalog for chain ${process.env.MUNCHI_CHAINCODE}`,
+        error,
+      );
       throw new HttpException('Failed to submit catalog', HttpStatus.BAD_REQUEST);
     }
   }
@@ -317,7 +322,7 @@ export class FoodoraService implements ProviderService {
 
     const transformedOrder: FoodoraOrder = {
       ...order,
-      products: order.products.map(product => ({
+      products: order.products.map((product) => ({
         ...product,
         quantity: product.quantity.toString(),
       })),
@@ -327,7 +332,7 @@ export class FoodoraService implements ProviderService {
         mobilePhone: order.customer.phone,
       },
     };
-  
+
     return transformedOrder;
   }
 
@@ -435,7 +440,7 @@ export class FoodoraService implements ProviderService {
 
     const mappedMenu = await this.foodoraMenuMapperService.mapMenuToCatalogImportDto(munchiMenu);
 
-    const result = await this.submitCatalog( mappedMenu);
+    const result = await this.submitCatalog(mappedMenu);
     return mappedMenu;
   }
 }

@@ -23,7 +23,6 @@ export class RestolutionService {
     const publicKey = 'publicKey';
     const privateKey = 'privateKey';
 
-
     const cacheKey = 'listRestaurants';
     const cachedData = this.cacheManager.get(cacheKey);
 

@@ -83,4 +83,3 @@ export const FoodoraOrderPrismaSelectArgs = Prisma.validator<Prisma.OrderInclude
     },
   },
 });
-
