@@ -18,8 +18,6 @@ export class FoodoraWebhookService {
   public async handleNewFoodoraOrder(formattedWoltOrder: any, business?: any): Promise<void> {
     await this.providerRepositoryService.saveWoltOrder(formattedWoltOrder);
 
-    //TODO: Implement the logic to send the order to the business
-
     const askResult = await this.socketService.emitWithAcknowledgement({
       room: business.orderingBusinessId || '', // none
       event: 'orders_register',

@@ -30,6 +30,7 @@ export interface FoodoraOrder {
   callbackUrls?: FoodoraCallbackUrls;
   status?: string;
   reason?: any;
+  req?: any;
 }
 
 export interface FoodoraCustomer {

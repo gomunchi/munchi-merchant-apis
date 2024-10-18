@@ -209,7 +209,6 @@ export class FoodoraService implements ProviderService {
       const queryParams = new URLSearchParams({
         status,
         pastNumberOfHours: pastNumberOfHours.toString(),
-        vendorId: vendorId || '', // optional vendorId
       });
 
       const response = await axios.get(
@@ -246,7 +245,7 @@ export class FoodoraService implements ProviderService {
         },
       );
 
-      return response.data;
+      return response.data.order;
     } catch (error) {
       this.logger.error(
         `Error getting order details for chain ${process.env.MUNCHI_CHAINCODE} and order ID ${orderId}`,
@@ -344,17 +343,17 @@ export class FoodoraService implements ProviderService {
     let orderIds = [];
     if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
       const acceptedOrders = await this.getOrdersIds('accepted');
-      orderIds = acceptedOrders.orderIdentifiers;
+      orderIds = acceptedOrders.orders;
     } else if (status.includes(OrderStatusEnum.REJECTED)) {
-      const cancelledOrders = await this.getOrdersIds('cancelled');
-      orderIds = cancelledOrders.orderIdentifiers;
+      const cancelledOrders: any = await this.getOrdersIds('cancelled');
+      orderIds = cancelledOrders.orders;
     } else {
       throw new BadRequestException('Foodora does not support this order status');
     }
 
     const orders = await Promise.all(
       orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails(orderId);
+        const order = await this.getOrderDetails(orderId.split('-_-')[1]);
         return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
       }),
     );
@@ -378,22 +377,22 @@ export class FoodoraService implements ProviderService {
       );
     }
 
-    if (orderData.preparedIn || orderData.reason) {
-      throw new ForbiddenException('Foodora does not support updating preparedIn or reason');
+    if (orderData.preparedIn) {
+      throw new ForbiddenException('Foodora does not support updating preparedIn');
     }
 
     try {
       if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
         await this.markFoodoraOrderAsPrepared(orderId);
       } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
-        await this.rejectOrder(orderingUserId, orderId, { reason: 'Order rejected' }, providerInfo);
+        await this.rejectOrder(orderingUserId, orderId, { reason: orderData.reason }, providerInfo);
       }
     } catch (error) {
       this.logger.error(`Error updating Foodora order ${orderId}`, error);
       throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails(orderId);
+    const order = await this.getOrderDetails(orderId.split('-_-')[1]);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
@@ -413,7 +412,7 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to reject Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails(orderId);
+    const order = await this.getOrderDetails(orderId.split('-_-')[1]);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
