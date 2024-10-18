@@ -33,7 +33,7 @@ export class FoodoraOrderMapperService {
   }
 
   public async mapFoodoraOrderToOrderResponse(foodoraOrder: FoodoraOrder): Promise<OrderResponse> {
-    const businessData = await this.validateBusinessByVenueId(foodoraOrder.platformRestaurant.id);
+    const businessData = await this.validateBusinessByVenueId(foodoraOrder.platformRestaurant.id);    
 
     let deliveryType: number = OrderingDeliveryType.PickUp;
 
@@ -77,9 +77,9 @@ export class FoodoraOrderMapperService {
       id: foodoraOrder.token,
       provider: ProviderEnum.Foodora,
       orderId: foodoraOrder.token,
-      orderNumber: foodoraOrder.code,
+      orderNumber: foodoraOrder.shortCode,
       business: {
-        publicId: foodoraOrder.platformRestaurant.id,
+        publicId: businessData.business.publicId,
         name: businessData.business.name,
         logo: businessData.business.logo,
         email: businessData.business.email,

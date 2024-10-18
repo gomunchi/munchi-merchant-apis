@@ -468,6 +468,22 @@ export class BusinessService {
     return provider.business;
   }
 
+  async findBusinessByOrderingBusinessId(orderingBusinessId: string) {
+    const provider = await this.prismaService.businessProviders.findFirst({
+      where: {
+        orderingBusinessId,
+      },
+      include: {
+        business: true,
+      },
+    });
+
+    if (!provider || !provider.business) {
+      throw new NotFoundException('No business found');
+    }
+    return provider.business;
+  }
+
   async getAssociateSessions(condition: Prisma.BusinessWhereInput): Promise<
     Prisma.BusinessGetPayload<{
       include: { sessions: true };

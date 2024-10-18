@@ -213,14 +213,12 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
-  public async processFoodoraOrder(foodoraWebhookdata: any) {
-    const orderId = foodoraWebhookdata.remoteOrderId.split('_').pop();
-    const venueId = foodoraWebhookdata.remoteOrderId.split('_')[2];
-    const order: FoodoraOrder = await this.foodoraService.getOrderById(orderId);
+  public async processFoodoraOrder(foodoraWebhookdata: any, remoteId: string) {
+    const orderId = foodoraWebhookdata.token.split('-_-')[1];
+    const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
+    const business = await this.businessService.findBusinessByWoltVenueId(remoteId);
 
-    const business = await this.businessService.findBusinessByWoltVenueId(venueId);
-
-    return { order, venueId, business };
+    return { order, business };
   }
 
   async foodoraOrderNotification(
@@ -231,19 +229,19 @@ export class WebhookService {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
 
     try {
-      const { order } = await this.processFoodoraOrder(foodoraWebhookdata.remoteResponse);
+      const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata, remoteId);
 
       const formattedFoodoraOrder =
         await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
 
       if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
-        await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder);
+        await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder, business);
         return 'New order processed';
       }
     } catch (error) {
       this.errorHandlingService.handleError(error, 'foodoraOrderNotification');
     }
 
-    return 'Its just a dummy response for testing purpose';
+    return 'Failed to process order';
   }
 }

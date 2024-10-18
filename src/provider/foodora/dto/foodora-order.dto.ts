@@ -9,6 +9,6 @@ export interface UpdateFoodoraOrderStatusDto {
 }
 
 export interface GetOrdersIdsResponse {
-  orderIdentifiers: string[];
+  orders: string[];
   count: number;
 }
