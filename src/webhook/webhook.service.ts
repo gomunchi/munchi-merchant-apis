@@ -213,10 +213,10 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
-  public async processFoodoraOrder(foodoraWebhookdata: any) {
+  public async processFoodoraOrder(foodoraWebhookdata: any, remoteId: string) {
     const orderId = foodoraWebhookdata.token.split('-_-')[1];
     const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
-    const business = await this.businessService.findBusinessByOrderingBusinessId('351');
+    const business = await this.businessService.findBusinessByWoltVenueId(remoteId);
 
     return { order, business };
   }
@@ -229,7 +229,7 @@ export class WebhookService {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
 
     try {
-      const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata);
+      const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata, remoteId);
 
       const formattedFoodoraOrder =
         await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);

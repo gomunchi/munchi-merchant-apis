@@ -33,7 +33,7 @@ export class FoodoraOrderMapperService {
   }
 
   public async mapFoodoraOrderToOrderResponse(foodoraOrder: FoodoraOrder): Promise<OrderResponse> {
-    const businessData = await this.validateBusinessByVenueId("351");    
+    const businessData = await this.validateBusinessByVenueId(foodoraOrder.platformRestaurant.id);    
 
     let deliveryType: number = OrderingDeliveryType.PickUp;
 
@@ -119,19 +119,14 @@ export class FoodoraOrderMapperService {
   }
 
   private async validateBusinessByVenueId(foodoraVenueId: string) {
-    const business = await this.prismaService.businessProviders.findFirst({
+    const business = await this.prismaService.provider.findUnique({
       where: {
-        orderingBusinessId: foodoraVenueId,
+        id: foodoraVenueId,
       },
       select: {
-        business: {
+        businesses: {
           select: {
-            name: true,
-            logo: true,
-            email: true,
-            phone: true,
-            address: true,
-            publicId: true,
+            business: true,
           },
         },
       },
@@ -141,6 +136,6 @@ export class FoodoraOrderMapperService {
       throw new NotFoundException('No business is associated with this id');
     }
 
-    return business;
+    return business.businesses[0];
   }
 }
