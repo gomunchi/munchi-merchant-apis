@@ -395,7 +395,7 @@ export class FoodoraService implements ProviderService {
       },
       include: FoodoraOrderPrismaSelectArgs,
     });
-    
+
     try {
       if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
         await this.markFoodoraOrderAsPrepared(existingOrder.orderId);
@@ -440,8 +440,14 @@ export class FoodoraService implements ProviderService {
     orderRejectData: { reason: string },
     providerInfo?: Provider,
   ): Promise<OrderingOrder | OrderResponse> {
+    const existingOrder = await this.prismaService.order.findUnique({
+      where: {
+        id: Number(orderId),
+      },
+    });
+
     try {
-      const response = await this.updateFoodoraOrderStatus(orderId, {
+      const response = await this.updateFoodoraOrderStatus(existingOrder.orderId, {
         status: FoodoraOrderStatus.Rejected,
         reason: orderRejectData.reason,
       });
@@ -450,7 +456,17 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to reject Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails(orderId.split('-_-')[1]);
+    await this.prismaService.order.update({
+      where: {
+        orderId: existingOrder.orderId,
+      },
+      data: {
+        status: OrderStatusEnum.REJECTED,
+        comment: orderRejectData.reason,
+      },
+    });
+
+    const order = await this.getOrderDetails(existingOrder.orderId.split('-_-')[1]);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 

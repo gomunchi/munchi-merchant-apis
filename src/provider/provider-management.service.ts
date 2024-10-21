@@ -202,14 +202,14 @@ export class ProviderManagmentService {
       );
     }
 
-    const { business } = order;
+    // const { business } = order;
 
-    const filterBusiness = businesses.filter((b) => b.id === business.publicId);
-    const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
+    // const filterBusiness = businesses.filter((b) => b.id === business.publicId);
+    // const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
 
     return this.moduleRef
       .get(`${provider}Service`)
-      .rejectOrder(orderingUserId, orderId, orderRejectData, filteredProvider[0]);
+      .rejectOrder(orderingUserId, orderId, orderRejectData);
   }
 
   async syncProviderMenu(
