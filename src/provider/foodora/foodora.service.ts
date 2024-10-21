@@ -81,7 +81,6 @@ export class FoodoraService implements ProviderService {
 
   async updateFoodoraOrderStatus(orderId: string, dto: UpdateFoodoraOrderStatusDto): Promise<void> {
     const accessToken = await this.foodoraLogin();
-
     try {
       await axios.post(`${this.foodoraApiUrl}/v2/order/status/${orderId}`, dto, {
         headers: {
@@ -390,22 +389,33 @@ export class FoodoraService implements ProviderService {
     orderData: Omit<OrderData, 'provider'>,
     providerInfo?: Provider,
   ): Promise<OrderingOrder | OrderResponse> {
+    const existingOrder = await this.prismaService.order.findUnique({
+      where: {
+        id: Number(orderId),
+      },
+      include: FoodoraOrderPrismaSelectArgs,
+    });
+    
     try {
       if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
-        await this.markFoodoraOrderAsPrepared(orderId);
+        await this.markFoodoraOrderAsPrepared(existingOrder.orderId);
       } else if (orderData.orderStatus === OrderStatusEnum.IN_PROGRESS) {
-        await this.updateFoodoraOrderStatus(orderId, {
+        await this.updateFoodoraOrderStatus(existingOrder.orderId, {
           acceptanceTime: new Date().toISOString(),
-          remoteOrderId: orderId.split('-_-')[1],
+          remoteOrderId: existingOrder.orderId.split('-_-')[1],
           status: FoodoraOrderStatus.Accepted,
         });
+      } else if (orderData.orderStatus === OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER) {
+        await this.updateFoodoraOrderStatus(existingOrder.orderId, {
+          status: FoodoraOrderStatus.PickedUp,
+        });
       } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
-        await this.rejectOrder(orderingUserId, orderId, { reason: orderData.reason }, providerInfo);
+        await this.rejectOrder(orderingUserId, existingOrder.orderId, { reason: orderData.reason });
       }
 
       await this.prismaService.order.update({
         where: {
-          orderId: orderId,
+          orderId: existingOrder.orderId,
         },
         data: {
           status: orderData.orderStatus,
@@ -420,7 +430,7 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    const order = await this.getOrderDetails(orderId.split('-_-')[1]);
+    const order = await this.getOrderDetails(existingOrder.orderId.split('-_-')[1]);
     return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
