@@ -216,7 +216,7 @@ export class WebhookService {
   public async processFoodoraOrder(foodoraWebhookdata: any, remoteId: string) {
     const orderId = foodoraWebhookdata.token.split('-_-')[1];
     const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
-    const business = await this.businessService.findBusinessByWoltVenueId(remoteId);
+    const business = await this.businessService.findBusinessByWoltVenueId(foodoraWebhookdata.platformRestaurant.id);
 
     return { order, business };
   }
