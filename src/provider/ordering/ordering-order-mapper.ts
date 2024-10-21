@@ -60,9 +60,7 @@ export class OrderingOrderMapperService {
       ? moment.utc(orderingOrder.created_at, inputFormat).local().toISOString(true)
       : null;
 
-    const userName = `${orderingOrder.customer.name ? orderingOrder.customer.name : 'Guest'} ${
-      orderingOrder.customer.lastname ? orderingOrder.customer.lastname : 'User'
-    }`;
+    const userName = orderingOrder.customer.name || 'Guest';
 
     const cellphone = orderingOrder.customer.cellphone || orderingOrder.customer.phone;
 
