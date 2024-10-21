@@ -214,7 +214,7 @@ export class FoodoraService implements ProviderService {
         process.env.MUNCHI_CHAINCODE
       }/orders/ids?${queryParams.toString()}`;
 
-      this.logger.log(`Fetching order IDs from: ${url}`);
+      this.logger.log('Fetching order IDs', { url });
 
       const response = await axios.get(url, {
         headers: {
@@ -222,38 +222,13 @@ export class FoodoraService implements ProviderService {
         },
       });
 
-      this.logger.log(
-        `Successfully fetched order IDs. Count: ${response.data.orders?.length || 0}`,
-      );
+      this.logger.log('Successfully fetched order IDs', {
+        count: response.data.orders?.length || 0,
+      });
 
       return response.data;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        this.logger.debug('Debug info for getOrdersIds:', {
-          status,
-          pastNumberOfHours,
-          vendorId,
-          chainCode: process.env.MUNCHI_CHAINCODE,
-          errorMessage: axiosError.message,
-          errorName: axiosError.name,
-          errorCode: axiosError.code,
-          responseStatus: axiosError.response?.status,
-          responseData: axiosError.response?.data,
-          requestURL: axiosError.config?.url,
-          requestMethod: axiosError.config?.method,
-          requestHeaders: axiosError.config?.headers,
-          stackTrace: axiosError.stack,
-        });
-      } else {
-        this.logger.debug('Debug info for non-Axios error in getOrdersIds:', {
-          status,
-          pastNumberOfHours,
-          vendorId,
-          chainCode: process.env.MUNCHI_CHAINCODE,
-          error: JSON.stringify(error),
-        });
-      }
+      this.logErrorDetails('getOrdersIds', error, { status, pastNumberOfHours, vendorId });
       throw new HttpException('Failed to get order identifiers', HttpStatus.BAD_REQUEST);
     }
   }
@@ -264,7 +239,7 @@ export class FoodoraService implements ProviderService {
     try {
       const url = `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`;
 
-      this.logger.log(`Fetching order details from: ${url}`);
+      this.logger.log('Fetching order details', { url, orderId });
 
       const response = await axios.get(url, {
         headers: {
@@ -272,33 +247,47 @@ export class FoodoraService implements ProviderService {
         },
       });
 
-      this.logger.log(`Successfully fetched details for order ID: ${orderId}`);
+      this.logger.log('Successfully fetched order details', { orderId });
 
       return response.data.order;
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        this.logger.debug('Debug info for getOrderDetails:', {
-          orderId,
-          chainCode: process.env.MUNCHI_CHAINCODE,
-          errorMessage: axiosError.message,
-          errorName: axiosError.name,
-          errorCode: axiosError.code,
-          responseStatus: axiosError.response?.status,
-          responseData: axiosError.response?.data,
-          requestURL: axiosError.config?.url,
-          requestMethod: axiosError.config?.method,
-          requestHeaders: axiosError.config?.headers,
-          stackTrace: axiosError.stack,
-        });
-      } else {
-        this.logger.debug('Debug info for non-Axios error in getOrderDetails:', {
-          orderId,
-          chainCode: process.env.MUNCHI_CHAINCODE,
-          error: JSON.stringify(error),
-        });
-      }
+      this.logErrorDetails('getOrderDetails', error, { orderId });
       throw new HttpException('Failed to get order details', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  private logErrorDetails(methodName: string, error: unknown, context: Record<string, unknown>) {
+    const errorDetails = {
+      method: methodName,
+      ...context,
+    };
+
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      this.logger.error('Axios error occurred', {
+        ...errorDetails,
+        errorMessage: axiosError.message,
+        errorName: axiosError.name,
+        errorCode: axiosError.code,
+        responseStatus: axiosError.response?.status,
+        responseData: axiosError.response?.data,
+        requestURL: axiosError.config?.url,
+        requestMethod: axiosError.config?.method,
+        requestHeaders: axiosError.config?.headers,
+        stack: axiosError.stack,
+      });
+    } else if (error instanceof Error) {
+      this.logger.error('Error occurred', {
+        ...errorDetails,
+        errorMessage: error.message,
+        errorName: error.name,
+        stack: error.stack,
+      });
+    } else {
+      this.logger.error('Unknown error occurred', {
+        ...errorDetails,
+        error: JSON.stringify(error),
+      });
     }
   }
   async submitCatalog(catalogImportDto: any): Promise<void> {
