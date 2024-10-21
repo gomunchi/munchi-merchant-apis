@@ -97,7 +97,7 @@ export class ProviderManagmentService {
         orderingToken,
         status,
         businessOrderingIds,
-        orderBy
+        orderBy,
       );
       allOrders.push(...foodoraOrders);
     }
@@ -166,11 +166,12 @@ export class ProviderManagmentService {
 
     //Check business from order data
 
-    const order = await this.getOrderById(orderId, orderingUserId);    
+    const order = await this.getOrderById(orderId, orderingUserId);
+
     const { business } = order;
 
-    // const filterBusiness = businesses.filter((b) => b.id === business.publicId);
-    // const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
+    const filterBusiness = businesses.filter((b) => b.id === business.publicId);
+    const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
 
     if (provider.length === 0) {
       throw new BadRequestException(
@@ -180,7 +181,7 @@ export class ProviderManagmentService {
     // Dynamic provider
     return this.moduleRef
       .get(`${provider}Service`)
-      .updateOrder(orderingUserId, orderId, updateData);
+      .updateOrder(orderingUserId, orderId, updateData, filteredProvider[0]);
   }
 
   async rejectOrder(
