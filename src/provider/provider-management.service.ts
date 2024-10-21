@@ -97,6 +97,7 @@ export class ProviderManagmentService {
         orderingToken,
         status,
         businessOrderingIds,
+        orderBy
       );
       allOrders.push(...foodoraOrders);
     }
