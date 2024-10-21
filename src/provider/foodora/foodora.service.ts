@@ -335,7 +335,7 @@ export class FoodoraService implements ProviderService {
     return transformedOrder;
   }
 
-  async getOrderByStatus(
+  async getOrderFromFoodoraByStatus(
     accessToken: string,
     status: AvailableOrderStatus[],
     businessIds: string[],
@@ -353,10 +353,33 @@ export class FoodoraService implements ProviderService {
 
     const orders = await Promise.all(
       orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails(orderId.split('-_-')[1]);
+        const order = await this.getOrderDetails(orderId);
         return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
       }),
     );
+
+    return orders;
+  }
+
+  async getOrderByStatus(
+    _,
+    status: AvailableOrderStatus[],
+    businessIds: string[],
+    orderBy?: Prisma.OrderOrderByWithRelationInput,
+  ): Promise<any[]> {
+    const orders = await this.prismaService.order.findMany({
+      where: {
+        status: {
+          in: status,
+        },
+        provider: ProviderEnum.Foodora,
+        orderingBusinessId: {
+          in: businessIds,
+        },
+      },
+      orderBy: orderBy,
+      include: FoodoraOrderPrismaSelectArgs,
+    });
 
     return orders;
   }
