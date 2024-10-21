@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
   forwardRef,
@@ -21,6 +22,8 @@ import { JwtTokenPayload } from './session.type';
 
 @Injectable()
 export class SessionService {
+  private readonly logger = new Logger(SessionService.name);
+
   constructor(
     @Inject(forwardRef(() => UtilsService)) readonly utils: UtilsService,
     @Inject(forwardRef(() => UserService)) private userService: UserService,
@@ -265,6 +268,8 @@ export class SessionService {
   }
 
   async updateAccessTime(sessionPublicId: string) {
+    this.logger.debug(`Updating access time for session: ${sessionPublicId}`);
+
     const session = await this.prismaService.session.findUnique({
       where: {
         publicId: sessionPublicId,
@@ -272,17 +277,26 @@ export class SessionService {
     });
 
     if (!session) {
+      this.logger.warn(`No session found with id: ${sessionPublicId}`);
       throw new UnauthorizedException('No session found with this id');
     }
 
-    await this.prismaService.session.update({
-      where: {
-        publicId: session.publicId,
-      },
-      data: {
-        lastAccessTs: moment.utc().toDate(),
-      },
-    });
+    this.logger.debug(`Session found: ${JSON.stringify(session)}`);
+
+    try {
+      await this.prismaService.session.update({
+        where: {
+          publicId: session.publicId,
+        },
+        data: {
+          lastAccessTs: moment.utc().toDate(),
+        },
+      });
+      this.logger.debug(`Successfully updated access time for session: ${sessionPublicId}`);
+    } catch (error) {
+      this.logger.error(`Error updating session access time: ${JSON.stringify(error)}`);
+      throw error;
+    }
   }
 
   async setSessionOnlineStatus(sessionPublicId: string, isOnline: boolean) {
