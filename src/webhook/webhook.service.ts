@@ -241,6 +241,7 @@ export class WebhookService {
         return 'New order processed';
       }
     } catch (error) {
+      console.log('Error', JSON.stringify(error));
       this.errorHandlingService.handleError(error, 'foodoraOrderNotification');
     }
 

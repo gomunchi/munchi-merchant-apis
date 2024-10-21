@@ -31,7 +31,6 @@ export class WebhookController {
     @Req() request: Request,
     @Param() remoteId: string,
   ) {
-    console.log(`Received Foodora request: ${JSON.stringify(request.headers)}`);
     return this.webhookService.foodoraOrderNotification(foodoraWebhookdata, request, remoteId);
   }
 }
