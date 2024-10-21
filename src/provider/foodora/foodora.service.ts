@@ -225,7 +225,7 @@ export class FoodoraService implements ProviderService {
     } catch (error) {
       this.logger.error(
         `Error getting order identifiers for chain ${process.env.MUNCHI_CHAINCODE} with status ${status} and vendorId ${vendorId}`,
-        error,
+        JSON.stringify(error),
       );
       throw new HttpException('Failed to get order identifiers', HttpStatus.BAD_REQUEST);
     }
@@ -248,7 +248,7 @@ export class FoodoraService implements ProviderService {
     } catch (error) {
       this.logger.error(
         `Error getting order details for chain ${process.env.MUNCHI_CHAINCODE} and order ID ${orderId}`,
-        error,
+        JSON.stringify(error),
       );
       throw new HttpException('Failed to get order details', HttpStatus.BAD_REQUEST);
     }
