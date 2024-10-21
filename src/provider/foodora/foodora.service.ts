@@ -390,28 +390,33 @@ export class FoodoraService implements ProviderService {
     orderData: Omit<OrderData, 'provider'>,
     providerInfo?: Provider,
   ): Promise<OrderingOrder | OrderResponse> {
-    if (
-      orderData.orderStatus !== OrderStatusEnum.PENDING &&
-      orderData.orderStatus !== OrderStatusEnum.REJECTED &&
-      orderData.orderStatus !== OrderStatusEnum.COMPLETED
-    ) {
-      throw new ForbiddenException(
-        'Foodora only supports updating order status to accepded, rejected or completed',
-      );
-    }
-
-    if (orderData.preparedIn) {
-      throw new ForbiddenException('Foodora does not support updating preparedIn');
-    }
-
     try {
       if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
         await this.markFoodoraOrderAsPrepared(orderId);
+      } else if (orderData.orderStatus === OrderStatusEnum.IN_PROGRESS) {
+        await this.updateFoodoraOrderStatus(orderId, {
+          acceptanceTime: new Date().toISOString(),
+          remoteOrderId: orderId.split('-_-')[1],
+          status: FoodoraOrderStatus.Accepted,
+        });
       } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
         await this.rejectOrder(orderingUserId, orderId, { reason: orderData.reason }, providerInfo);
       }
+
+      await this.prismaService.order.update({
+        where: {
+          orderId: orderId,
+        },
+        data: {
+          status: orderData.orderStatus,
+        },
+        include: FoodoraOrderPrismaSelectArgs,
+      });
     } catch (error) {
-      this.logger.error(`Error updating Foodora order ${orderId}`, error);
+      this.logger.error(
+        `Error updating Foodora order ${orderId} to status ${orderData.orderStatus}`,
+        error,
+      );
       throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
     }
 
