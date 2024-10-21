@@ -166,22 +166,21 @@ export class ProviderManagmentService {
 
     //Check business from order data
 
-    const order = await this.getOrderById(orderId, orderingUserId);
+    const order = await this.getOrderById(orderId, orderingUserId);    
     const { business } = order;
 
-    const filterBusiness = businesses.filter((b) => b.id === business.publicId);
-    const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
+    // const filterBusiness = businesses.filter((b) => b.id === business.publicId);
+    // const filteredProvider = filterBusiness[0].provider.filter((p) => p.name === provider);
 
     if (provider.length === 0) {
       throw new BadRequestException(
         `Something wrong happened: updateOrder() at 132, ${ProviderManagmentService.name}`,
       );
     }
-
     // Dynamic provider
     return this.moduleRef
       .get(`${provider}Service`)
-      .updateOrder(orderingUserId, orderId, updateData, filteredProvider[0]);
+      .updateOrder(orderingUserId, orderId, updateData);
   }
 
   async rejectOrder(
