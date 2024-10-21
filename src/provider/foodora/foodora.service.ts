@@ -372,7 +372,7 @@ export class FoodoraService implements ProviderService {
         status: {
           in: status,
         },
-        provider: ProviderEnum.Wolt,
+        provider: ProviderEnum.Foodora,
         orderingBusinessId: {
           in: businessIds,
         },
