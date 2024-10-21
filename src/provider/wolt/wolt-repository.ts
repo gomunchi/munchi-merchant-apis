@@ -93,7 +93,6 @@ export class WoltRepositoryService {
     };
 
     console.log(orderData.data.business);
-    
 
     // Save order to database
     const order = await this.prismaService.order.create(orderData);

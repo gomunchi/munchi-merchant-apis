@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Provider } from '@prisma/client';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
@@ -210,23 +210,50 @@ export class FoodoraService implements ProviderService {
         pastNumberOfHours: pastNumberOfHours.toString(),
       });
 
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${
-          process.env.MUNCHI_CHAINCODE
-        }/orders/ids?${queryParams.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+      const url = `${this.foodoraApiUrl}/v2/chains/${
+        process.env.MUNCHI_CHAINCODE
+      }/orders/ids?${queryParams.toString()}`;
+
+      this.logger.log(`Fetching order IDs from: ${url}`);
+
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
         },
+      });
+
+      this.logger.log(
+        `Successfully fetched order IDs. Count: ${response.data.orders?.length || 0}`,
       );
 
       return response.data;
     } catch (error) {
-      this.logger.error(
-        `Error getting order identifiers for chain ${process.env.MUNCHI_CHAINCODE} with status ${status} and vendorId ${vendorId}`,
-        JSON.stringify(error),
-      );
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        this.logger.debug('Debug info for getOrdersIds:', {
+          status,
+          pastNumberOfHours,
+          vendorId,
+          chainCode: process.env.MUNCHI_CHAINCODE,
+          errorMessage: axiosError.message,
+          errorName: axiosError.name,
+          errorCode: axiosError.code,
+          responseStatus: axiosError.response?.status,
+          responseData: axiosError.response?.data,
+          requestURL: axiosError.config?.url,
+          requestMethod: axiosError.config?.method,
+          requestHeaders: axiosError.config?.headers,
+          stackTrace: axiosError.stack,
+        });
+      } else {
+        this.logger.debug('Debug info for non-Axios error in getOrdersIds:', {
+          status,
+          pastNumberOfHours,
+          vendorId,
+          chainCode: process.env.MUNCHI_CHAINCODE,
+          error: JSON.stringify(error),
+        });
+      }
       throw new HttpException('Failed to get order identifiers', HttpStatus.BAD_REQUEST);
     }
   }
@@ -235,25 +262,45 @@ export class FoodoraService implements ProviderService {
     const accessToken = await this.foodoraLogin();
 
     try {
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+      const url = `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`;
+
+      this.logger.log(`Fetching order details from: ${url}`);
+
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
         },
-      );
+      });
+
+      this.logger.log(`Successfully fetched details for order ID: ${orderId}`);
 
       return response.data.order;
     } catch (error) {
-      this.logger.error(
-        `Error getting order details for chain ${process.env.MUNCHI_CHAINCODE} and order ID ${orderId}`,
-        JSON.stringify(error),
-      );
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        this.logger.debug('Debug info for getOrderDetails:', {
+          orderId,
+          chainCode: process.env.MUNCHI_CHAINCODE,
+          errorMessage: axiosError.message,
+          errorName: axiosError.name,
+          errorCode: axiosError.code,
+          responseStatus: axiosError.response?.status,
+          responseData: axiosError.response?.data,
+          requestURL: axiosError.config?.url,
+          requestMethod: axiosError.config?.method,
+          requestHeaders: axiosError.config?.headers,
+          stackTrace: axiosError.stack,
+        });
+      } else {
+        this.logger.debug('Debug info for non-Axios error in getOrderDetails:', {
+          orderId,
+          chainCode: process.env.MUNCHI_CHAINCODE,
+          error: JSON.stringify(error),
+        });
+      }
       throw new HttpException('Failed to get order details', HttpStatus.BAD_REQUEST);
     }
   }
-
   async submitCatalog(catalogImportDto: any): Promise<void> {
     const accessToken = await this.foodoraLogin();
 
