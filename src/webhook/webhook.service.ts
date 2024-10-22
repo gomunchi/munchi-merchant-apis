@@ -230,7 +230,7 @@ export class WebhookService {
     remoteId: string,
   ): Promise<string> {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    // await new Promise((resolve) => setTimeout(resolve, 2000));
 
     try {
       const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata, remoteId);
