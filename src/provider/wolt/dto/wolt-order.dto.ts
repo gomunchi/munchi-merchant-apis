@@ -161,6 +161,7 @@ export const WoltOrderPrismaSelectArgs = Prisma.validator<Prisma.OrderInclude>()
       phone: true,
       description: true,
       timeZone: true,
+      address: true,
     },
   },
   customer: {

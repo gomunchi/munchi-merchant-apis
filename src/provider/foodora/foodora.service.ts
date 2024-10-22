@@ -1,26 +1,20 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, Provider } from '@prisma/client';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { OrderData } from 'src/type';
 import { UtilsService } from 'src/utils/utils.service';
 import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { ProviderService } from '../provider.service';
-import { ProviderEnum, ProviderOrder } from '../provider.type';
+import { ProviderEnum } from '../provider.type';
 
-import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import moment from 'moment';
 import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
-import { OrderingOrder } from '../ordering/dto/ordering-order.dto';
+import { Retry } from 'src/utils/retry';
+import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { FoodoraOrder } from './dto/foodora-order-response.dto';
-import { CatalogImportDto } from './dto/foodora-menu.dto';
 import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora-order.dto';
 import {
   AvailabilityStatusResponse,
@@ -29,9 +23,9 @@ import {
   OpenRestaurantDto,
 } from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
-import { FoodoraOrderMapperService } from './foodora-order-mapper';
-import { FoodoraMenuMapperService } from './foodora-menu-mapper';
 import { MunchiMenu } from './dto/munchi-menu.dto';
+import { FoodoraMenuMapperService } from './foodora-menu-mapper';
+import { FoodoraOrderMapperService } from './foodora-order-mapper';
 
 @Injectable()
 export class FoodoraService implements ProviderService {
@@ -47,6 +41,7 @@ export class FoodoraService implements ProviderService {
     private readonly utilsService: UtilsService,
     private readonly orderingMenuMapperService: OrderingMenuMapperService,
     private readonly foodoraOrderMapperService: FoodoraOrderMapperService,
+    private eventEmitter: EventEmitter2,
     private readonly foodoraMenuMapperService: FoodoraMenuMapperService,
   ) {
     this.foodoraApiUrl = this.configService.get('FOODORA_API_URL');
@@ -82,12 +77,13 @@ export class FoodoraService implements ProviderService {
   async updateFoodoraOrderStatus(orderId: string, dto: UpdateFoodoraOrderStatusDto): Promise<void> {
     const accessToken = await this.foodoraLogin();
     try {
-      await axios.post(`${this.foodoraApiUrl}/v2/order/status/${orderId}`, dto, {
+      const response = await axios.post(`${this.foodoraApiUrl}/v2/order/status/${orderId}`, dto, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
       });
+      console.log('🚀 ~ FoodoraService ~ updateFoodoraOrderStatus ~ response:', response);
     } catch (error) {
       this.logger.error(`Error updating Foodora order status ${orderId}`, error);
       throw new HttpException('Failed to update Foodora order status', HttpStatus.BAD_REQUEST);
@@ -97,18 +93,18 @@ export class FoodoraService implements ProviderService {
   async markFoodoraOrderAsPrepared(orderId: string): Promise<void> {
     const accessToken = await this.foodoraLogin();
 
+    const options: AxiosRequestConfig = {
+      url: `${this.foodoraApiUrl}/v2/orders/${orderId}/preparation-completed`,
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+
     try {
-      await axios.post(
-        `${this.foodoraApiUrl}/v2/orders/${orderId}/preparation-completed`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
+      await axios.request(options);
     } catch (error) {
-      this.logger.error(`Error marking Foodora order ${orderId} as prepared`, error);
+      this.logger.error(`Error markFoodoraOrderAsPrepared: ${JSON.stringify(error)}`);
       throw new HttpException('Failed to mark Foodora order as prepared', HttpStatus.BAD_REQUEST);
     }
   }
@@ -227,6 +223,11 @@ export class FoodoraService implements ProviderService {
     }
   }
 
+  @Retry({
+    attempts: 3,
+    delay: 1000,
+    exponentialBackoff: true,
+  })
   async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
     const accessToken = await this.foodoraLogin();
 
@@ -240,11 +241,11 @@ export class FoodoraService implements ProviderService {
         },
       );
 
-      console.log('Order data', JSON.stringify(response.data));
+      // console.log('Order data', JSON.stringify(response.data));
 
       return response.data.order;
     } catch (error) {
-      console.log('Error', JSON.stringify(error));
+      this.logger.error('Error getOrderDetails', JSON.stringify(error));
     }
   }
 
@@ -376,56 +377,107 @@ export class FoodoraService implements ProviderService {
 
     return orders;
   }
-
   async updateOrder(
     orderingUserId: number,
     orderId: string,
     orderData: Omit<OrderData, 'provider'>,
     providerInfo?: Provider,
-  ): Promise<OrderingOrder | OrderResponse> {
-    const existingOrder = await this.prismaService.order.findUnique({
-      where: {
-        id: Number(orderId),
-      },
-      include: FoodoraOrderPrismaSelectArgs,
-    });
+  ): Promise<any> {
+    let status: AvailableOrderStatus = orderData.orderStatus;
 
     try {
-      if (orderData.orderStatus === OrderStatusEnum.COMPLETED) {
-        await this.markFoodoraOrderAsPrepared(existingOrder.orderId);
-      } else if (orderData.orderStatus === OrderStatusEnum.IN_PROGRESS) {
-        await this.updateFoodoraOrderStatus(existingOrder.orderId, {
-          acceptanceTime: new Date().toISOString(),
-          remoteOrderId: existingOrder.orderId.split('-_-')[1],
-          status: FoodoraOrderStatus.Accepted,
-        });
-      } else if (orderData.orderStatus === OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER) {
-        await this.updateFoodoraOrderStatus(existingOrder.orderId, {
-          status: FoodoraOrderStatus.PickedUp,
-        });
-      } else if (orderData.orderStatus === OrderStatusEnum.REJECTED) {
-        await this.rejectOrder(orderingUserId, existingOrder.orderId, { reason: orderData.reason });
+      // Single database query with required relations
+      const order = await this.prismaService.order.findUnique({
+        where: { id: +orderId },
+        include: FoodoraOrderPrismaSelectArgs,
+      });
+
+      const preparationTime = orderData.preparedIn
+        ? moment().add(orderData.preparedIn, 'minutes').toISOString()
+        : new Date().toISOString();
+
+      // Handle status updates using a more maintainable switch statement
+      await this.handleStatusUpdate(order, orderData.orderStatus, preparationTime);
+
+      if (
+        order.deliveryType === OrderingDeliveryType.PickUp &&
+        orderData.orderStatus === OrderStatusEnum.COMPLETED
+      ) {
+        status = OrderStatusEnum.COMPLETED;
       }
 
-      await this.prismaService.order.update({
-        where: {
-          orderId: existingOrder.orderId,
-        },
+      // Handle delivery type specific logic
+      if (
+        order.deliveryType === OrderingDeliveryType.Delivery &&
+        orderData.orderStatus === OrderStatusEnum.PICK_UP_COMPLETED_BY_DRIVER
+      ) {
+        status = OrderStatusEnum.DELIVERED;
+      }
+
+      // Update the order in the database
+      const updatedOrder = await this.prismaService.order.update({
+        where: { id: +orderId },
         data: {
-          status: orderData.orderStatus,
+          status,
+          lastModified: new Date().toISOString(),
+          // Add any other fields that need updating
         },
         include: FoodoraOrderPrismaSelectArgs,
       });
+
+      // // Notify about changes
+      // this.eventEmitter.emit(
+      //   'database.notifyChanges',
+      //   ProviderEnum.Foodora,
+      //   order.orderId,
+      //   order.business.publicId,
+      // );
+
+      return updatedOrder;
     } catch (error) {
       this.logger.error(
         `Error updating Foodora order ${orderId} to status ${orderData.orderStatus}`,
-        error,
+        error instanceof Error ? error.message : 'Unknown error',
+        error instanceof Error ? error.stack : '',
       );
-      throw new HttpException('Failed to update Foodora order', HttpStatus.BAD_REQUEST);
-    }
 
-    const order = await this.getOrderDetails(existingOrder.orderId.split('-_-')[1]);
-    return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
+      throw new HttpException(
+        `Failed to update Foodora order: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private async handleStatusUpdate(
+    order: any,
+    newStatus: OrderStatusEnum,
+    preparationTime: string,
+  ): Promise<void> {
+    switch (newStatus) {
+      case OrderStatusEnum.IN_PROGRESS:
+        await this.updateFoodoraOrderStatus(order.orderId, {
+          acceptanceTime: preparationTime,
+          remoteOrderId: order.orderId.split('-_-')[1],
+          status: FoodoraOrderStatus.Accepted,
+        });
+        break;
+
+      case OrderStatusEnum.COMPLETED:
+        if (order.deliveryType === OrderingDeliveryType.Delivery) {
+          await this.markFoodoraOrderAsPrepared(order.orderId);
+        }
+        break;
+
+      case OrderStatusEnum.DELIVERED:
+        if (order.deliveryType === OrderingDeliveryType.PickUp) {
+          await this.updateFoodoraOrderStatus(order.orderId, {
+            status: FoodoraOrderStatus.PickedUp,
+          });
+        }
+        break;
+    }
   }
 
   async rejectOrder(
@@ -433,7 +485,7 @@ export class FoodoraService implements ProviderService {
     orderId: string,
     orderRejectData: { reason: string },
     providerInfo?: Provider,
-  ): Promise<OrderingOrder | OrderResponse> {
+  ): Promise<any> {
     const existingOrder = await this.prismaService.order.findUnique({
       where: {
         id: Number(orderId),
@@ -441,7 +493,7 @@ export class FoodoraService implements ProviderService {
     });
 
     try {
-      const response = await this.updateFoodoraOrderStatus(existingOrder.orderId, {
+      await this.updateFoodoraOrderStatus(existingOrder.orderId, {
         status: FoodoraOrderStatus.Rejected,
         reason: orderRejectData.reason,
       });
@@ -450,18 +502,16 @@ export class FoodoraService implements ProviderService {
       throw new HttpException('Failed to reject Foodora order', HttpStatus.BAD_REQUEST);
     }
 
-    await this.prismaService.order.update({
+    return await this.prismaService.order.update({
       where: {
         orderId: existingOrder.orderId,
       },
       data: {
         status: OrderStatusEnum.REJECTED,
         comment: orderRejectData.reason,
+        lastModified: moment().toISOString(),
       },
     });
-
-    const order = await this.getOrderDetails(existingOrder.orderId.split('-_-')[1]);
-    return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
   }
 
   async getMunchiMenu(): Promise<MunchiMenu> {

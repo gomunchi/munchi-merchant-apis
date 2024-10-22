@@ -3,7 +3,11 @@ import { UtilsService } from 'src/utils/utils.service';
 import { ProviderEnum } from '../provider.type';
 import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { FoodoraOrder, FoodoraProduct } from './dto/foodora-order-response.dto';
+import {
+  FoodoraExpeditionType,
+  FoodoraOrder,
+  FoodoraProduct,
+} from './dto/foodora-order-response.dto';
 import { ProductDto } from 'src/order/dto/product.dto';
 import {
   AvailableOrderStatus,
@@ -13,6 +17,8 @@ import {
   PayMethodEnum,
 } from 'src/order/dto/order.dto';
 import { FoodoraOrderStatus } from './dto/foodora.enum.dto';
+import { WoltOrderType } from '../wolt/dto/wolt-order.dto';
+import moment from 'moment';
 
 @Injectable()
 export class FoodoraOrderMapperService {
@@ -72,8 +78,15 @@ export class FoodoraOrderMapperService {
       ? this.utilsService.convertTimeToTimeZone(foodoraOrder.expiryDate, 'Europe/Helsinki')
       : null;
 
+    const pickupTime =
+      foodoraOrder.expeditionType === FoodoraExpeditionType.Delivery
+        ? foodoraOrder.delivery.riderPickupTime
+        : foodoraOrder.pickup.pickupTime;
+
     const payMethodId =
       foodoraOrder.payment?.type === 'online' ? PayMethodEnum.Card : PayMethodEnum.Cash;
+
+    const now = moment().toISOString();
 
     return {
       id: foodoraOrder.token,
@@ -87,7 +100,7 @@ export class FoodoraOrderMapperService {
         email: businessData.business.email,
         address: businessData.business.address,
       },
-      type: preOrderTime ? ('preorder' as any) : ('instant' as any),
+      type: foodoraOrder.preOrder ? WoltOrderType.PreOrder : WoltOrderType.Instant,
       status: orderStatusMapping[foodoraOrder.status] || OrderStatusEnum.PENDING,
       deliveryType: deliveryType,
       createdAt: createdAt,
@@ -109,9 +122,9 @@ export class FoodoraOrderMapperService {
         total: foodoraOrder.price?.grandTotal,
       },
       deliveryEta: deliveryTime,
-      pickupEta: null,
+      pickupEta: pickupTime,
       offers: [],
-      lastModified: foodoraOrder.createdAt,
+      lastModified: now,
       customer: {
         name: foodoraOrder.customer?.firstName + ' ' + foodoraOrder.customer?.lastName,
         phone: foodoraOrder.customer?.mobilePhone,

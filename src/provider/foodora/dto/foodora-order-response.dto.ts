@@ -9,7 +9,7 @@ export interface FoodoraOrder {
   customer?: FoodoraCustomer;
   delivery?: FoodoraDelivery;
   discounts?: FoodoraDiscount[];
-  expeditionType?: string;
+  expeditionType?: FoodoraExpeditionType;
   expiryDate?: string;
   extraParameters?: FoodoraExtraParameters;
   localInfo?: FoodoraLocalInfo;
@@ -17,7 +17,7 @@ export interface FoodoraOrder {
   test?: boolean;
   shortCode?: string;
   preOrder?: boolean;
-  pickup?: any;
+  pickup?: FoodoraPickUp;
   platformRestaurant?: FoodoraPlatformRestaurant;
   price?: FoodoraPrice;
   products?: FoodoraProduct[];
@@ -31,6 +31,11 @@ export interface FoodoraOrder {
   status?: string;
   reason?: any;
   req?: any;
+}
+
+export enum FoodoraExpeditionType {
+  PickUp = 'pickup',
+  Delivery = 'delivery',
 }
 
 export interface FoodoraCustomer {
@@ -49,6 +54,13 @@ export interface FoodoraDelivery {
   expectedDeliveryTime?: string;
   expressDelivery?: boolean;
   riderPickupTime?: string;
+}
+
+export interface FoodoraPickUp {
+  pickupCity: string;
+  pickupAddress: string;
+  pickupTime: string;
+  pickupCode: string;
 }
 
 export interface FoodoraAddress {

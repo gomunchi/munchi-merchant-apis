@@ -16,10 +16,12 @@ import { WoltWebhookService } from './wolt/wolt-webhook';
 import { FoodoraOrderMapperService } from './foodora/foodora-order-mapper';
 import { FoodoraWebhookService } from './foodora/foodora-webhook.service';
 import { FoodoraMenuMapperService } from './foodora/foodora-menu-mapper';
+import { ProviderRepositoryService } from './provider.repository.service';
 
 @Module({
   providers: [
     ProviderManagmentService,
+    ProviderRepositoryService,
     // Ordering Services
     OrderingService,
     OrderingOrderMapperService,
@@ -60,6 +62,7 @@ import { FoodoraMenuMapperService } from './foodora/foodora-menu-mapper';
     FoodoraService,
     FoodoraOrderMapperService,
     ProviderManagmentService,
+    ProviderRepositoryService,
     WoltOrderMapperService,
     WoltMenuMapperService,
     WoltRepositoryService,
