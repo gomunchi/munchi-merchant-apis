@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { PosAvailabilityState, PosClosingReason } from './foodora.enum.dto';
 
 export interface OpenRestaurantDto {
   platformKey: string;
@@ -6,10 +7,9 @@ export interface OpenRestaurantDto {
 }
 
 export interface CloseRestaurantDto {
-  closedReason: string;
+  availabilityState: PosAvailabilityState;
+  closedReason: PosClosingReason;
   closingMinutes?: number;
-  platformKey: string;
-  platformRestaurantId: string;
 }
 
 export interface AvailabilityStatusResponse {
