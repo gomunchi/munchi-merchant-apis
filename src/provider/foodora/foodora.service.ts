@@ -113,15 +113,12 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async getFoodoraAvailabilityStatus(
-    chainCode: string,
-    posVendorId: string,
-  ): Promise<AvailabilityStatusResponse[]> {
+  async getFoodoraAvailabilityStatus(posVendorId: string): Promise<AvailabilityStatusResponse> {
     const accessToken = await this.foodoraLogin();
 
     try {
       const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/remoteVendors/${posVendorId}/availability`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
         {
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -132,24 +129,22 @@ export class FoodoraService implements ProviderService {
       return response.data;
     } catch (error) {
       this.logger.error(
-        `Error getting Foodora availability status for ${chainCode}/${posVendorId}`,
+        `Error getting Foodora availability status for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
         error,
       );
       throw new HttpException('Failed to get Foodora availability status', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async openFoodoraRestaurant(
-    chainCode: string,
-    posVendorId: string,
-    data: OpenRestaurantDto,
-  ): Promise<void> {
+  async openFoodoraRestaurant(posVendorId: string): Promise<void> {
     const accessToken = await this.foodoraLogin();
+    const { platformKey, platformRestaurantId } = await this.getFoodoraAvailabilityStatus(
+      posVendorId,
+    ).then((res) => res[0]);
 
     try {
-      const { platformKey, platformRestaurantId } = data;
       await axios.put(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/remoteVendors/${posVendorId}/availability`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
         {
           availabilityState: PosAvailabilityState.OPEN,
           platformKey,
@@ -162,26 +157,25 @@ export class FoodoraService implements ProviderService {
         },
       );
     } catch (error) {
-      this.logger.error(`Error opening Foodora restaurant for ${chainCode}/${posVendorId}`, error);
+      this.logger.error(
+        `Error opening Foodora restaurant for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
+        error,
+      );
       throw new HttpException('Failed to open Foodora restaurant', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async closeFoodoraRestaurant(
-    chainCode: string,
-    posVendorId: string,
-    data: CloseRestaurantDto,
-  ): Promise<void> {
+  async closeFoodoraRestaurant(posVendorId: string, data: CloseRestaurantDto): Promise<void> {
     const accessToken = await this.foodoraLogin();
+    const { platformKey, platformRestaurantId } = await this.getFoodoraAvailabilityStatus(
+      posVendorId,
+    ).then((res) => res[0]);
 
     try {
-      const { closedReason, closingMinutes, platformKey, platformRestaurantId } = data;
       await axios.put(
-        `${this.foodoraApiUrl}/v2/chains/${chainCode}/remoteVendors/${posVendorId}/availability`,
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
         {
-          availabilityState: PosAvailabilityState.CLOSED_UNTIL,
-          closedReason,
-          closingMinutes,
+          ...data,
           platformKey,
           platformRestaurantId,
         },
@@ -192,7 +186,10 @@ export class FoodoraService implements ProviderService {
         },
       );
     } catch (error) {
-      this.logger.error(`Error closing Foodora restaurant for ${chainCode}/${posVendorId}`, error);
+      this.logger.error(
+        `Error closing Foodora restaurant for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
+        error,
+      );
       throw new HttpException('Failed to close Foodora restaurant', HttpStatus.BAD_REQUEST);
     }
   }
