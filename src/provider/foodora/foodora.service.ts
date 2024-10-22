@@ -12,7 +12,6 @@ import { ProviderEnum } from '../provider.type';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import moment from 'moment';
 import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
-import { Retry } from 'src/utils/retry';
 import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { FoodoraOrder } from './dto/foodora-order-response.dto';
 import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora-order.dto';
@@ -20,13 +19,22 @@ import {
   AvailabilityStatusResponse,
   CloseRestaurantDto,
   FoodoraOrderPrismaSelectArgs,
-  OpenRestaurantDto,
 } from './dto/foodora-restaurant-availability.dto';
 import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
 import { MunchiMenu } from './dto/munchi-menu.dto';
 import { FoodoraMenuMapperService } from './foodora-menu-mapper';
 import { FoodoraOrderMapperService } from './foodora-order-mapper';
 
+interface RetryConfig {
+  maxRetries: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffFactor: number;
+}
+
+const sleep = (ms: number): Promise<void> => {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+};
 @Injectable()
 export class FoodoraService implements ProviderService {
   private readonly logger = new Logger(ProviderService.name);
@@ -34,7 +42,12 @@ export class FoodoraService implements ProviderService {
   private foodoraUsername: string;
   private foodoraPassword: string;
   private foodoraSecret: string;
-
+  private readonly defaultRetryConfig: RetryConfig = {
+    maxRetries: 3,
+    initialDelayMs: 1000,
+    maxDelayMs: 10000,
+    backoffFactor: 2,
+  };
   constructor(
     private readonly configService: ConfigService,
     private readonly prismaService: PrismaService,
@@ -220,30 +233,84 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  @Retry({
-    attempts: 3,
-    delay: 1000,
-    exponentialBackoff: true,
-  })
-  async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
-    const accessToken = await this.foodoraLogin();
+  private async retryOperation<T>(
+    operation: () => Promise<T>,
+    config: RetryConfig = this.defaultRetryConfig,
+  ): Promise<T> {
+    let lastError: Error;
+    let delay = config.initialDelayMs;
 
-    try {
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
+    for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        lastError = error as Error;
 
-      // console.log('Order data', JSON.stringify(response.data));
+        if (!this.isRetryableError(error)) {
+          throw error;
+        }
 
-      return response.data.order;
-    } catch (error) {
-      this.logger.error('Error getOrderDetails', JSON.stringify(error));
+        if (attempt === config.maxRetries) {
+          break;
+        }
+
+        this.logger.warn(`Attempt ${attempt} failed for operation. Retrying in ${delay}ms...`, {
+          error: lastError.message,
+          attempt,
+          delay,
+        });
+
+        await sleep(delay);
+        delay = Math.min(delay * config.backoffFactor, config.maxDelayMs);
+      }
     }
+
+    throw new Error(
+      `Operation failed after ${config.maxRetries} attempts. Last error: ${lastError.message}`,
+    );
+  }
+
+  private isRetryableError(error: unknown): boolean {
+    if (axios.isAxiosError(error)) {
+      const statusCode = error.response?.status;
+      console.log('🚀 ~ FoodoraService ~ isRetryableError ~ statusCode:', statusCode);
+
+      // Retry on network errors or specific HTTP status codes
+      return (
+        !statusCode || // Network error
+        statusCode === 408 || // Request Timeout
+        statusCode === 429 || // Too Many Requests
+        statusCode >= 500
+      ); // Server errors
+    }
+
+    return false;
+  }
+
+  async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
+    return this.retryOperation(async () => {
+      const accessToken = await this.foodoraLogin();
+
+      try {
+        const response = await axios.get(
+          `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+
+        return response.data.order;
+      } catch (error) {
+        this.logger.error('Error getOrderDetails', {
+          orderId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        throw error; // Rethrow to be handled by retry mechanism
+      }
+    });
   }
 
   async submitCatalog(catalogImportDto: any): Promise<void> {
