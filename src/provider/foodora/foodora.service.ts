@@ -238,7 +238,7 @@ export class FoodoraService implements ProviderService {
         },
       );
 
-      // console.log('Order data', JSON.stringify(response.data));
+      console.log('getOrderDetails', JSON.stringify(response.data), 'orderId', orderId);
 
       return response.data.order;
     } catch (error) {
