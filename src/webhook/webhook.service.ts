@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { OrderStatusEnum } from 'src/order/dto/order.dto';
-import { FoodoraOrder, FoodoraWebhook } from 'src/provider/foodora/dto/foodora-order-response.dto';
+import { FoodoraWebhook } from 'src/provider/foodora/dto/foodora-order-response.dto';
 import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
 import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
 import { FoodoraService } from 'src/provider/foodora/foodora.service';
@@ -212,34 +212,20 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
-  public async processFoodoraOrder(foodoraWebhookdata: FoodoraWebhook, remoteId: string) {
-    const orderId = this.foodoraService.extractOrderId(foodoraWebhookdata.token);
-    const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
-    this.logger.log(`new Foodora order: ${JSON.stringify(order)}`);
-    const business = await this.businessService.findBusinessByWoltVenueId(
-      foodoraWebhookdata.platformRestaurant.id,
-    );
-
-    return { order, business };
-  }
-
   async foodoraOrderNotification(
     foodoraWebhookdata: FoodoraWebhook,
     request: any,
     remoteId: string,
   ): Promise<string> {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
-    // await new Promise((resolve) => setTimeout(resolve, 2000));
 
     try {
-      const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata, remoteId);
-
-      if (!order) {
-        return;
-      }
+      const business = await this.businessService.findBusinessByWoltVenueId(
+        foodoraWebhookdata.platformRestaurant.id,
+      );
 
       const formattedFoodoraOrder =
-        await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
+        await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(foodoraWebhookdata);
 
       if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
         await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder, business);
