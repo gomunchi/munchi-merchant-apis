@@ -20,6 +20,7 @@ import { WoltOrderNotification } from 'src/provider/wolt/dto/wolt-order.dto';
 import { WoltWebhookService } from 'src/provider/wolt/wolt-webhook';
 import { SocketService } from 'src/socket/socket.service';
 import { AuthenticatedGateway } from 'src/socket/socket.v2.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class WebhookService {
@@ -40,6 +41,7 @@ export class WebhookService {
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
     private socketV2Service: AuthenticatedGateway,
+    private prismaService: PrismaService,
   ) {}
 
   async emitUpdateAppState(deviceId: string) {
@@ -212,12 +214,11 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
-  public async processFoodoraOrder(foodoraWebhookdata: FoodoraWebhook, remoteId: string) {
-    const orderId = this.foodoraService.extractOrderId(foodoraWebhookdata.token);
+  public async processFoodoraOrder(orderId: string) {
     const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
     this.logger.log(`new Foodora order: ${JSON.stringify(order)}`);
     const business = await this.businessService.findBusinessByWoltVenueId(
-      foodoraWebhookdata.platformRestaurant.id,
+      `FI${order.platformRestaurant.id}`,
     );
 
     return { order, business };
@@ -229,22 +230,37 @@ export class WebhookService {
     remoteId: string,
   ): Promise<string> {
     this.logger.log(`Received Foodora webhook data: ${JSON.stringify(foodoraWebhookdata)}`);
-    // await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     try {
-      const { order, business } = await this.processFoodoraOrder(foodoraWebhookdata, remoteId);
+      const orderIds = await this.foodoraService.getOrdersIds('accepted', 24, remoteId);
 
-      if (!order) {
-        return;
+      for (const orderId of orderIds.orders) {
+        const { order, business } = await this.processFoodoraOrder(orderId);
+
+        if (!order) {
+          return;
+        }
+
+        const orderExists = await this.prismaService.order.findFirst({
+          where: {
+            orderId: order.token,
+          },
+        });
+
+        if (orderExists) {
+          continue;
+        }
+
+        const formattedFoodoraOrder =
+          await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
+
+        if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
+          await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder, business);
+        }
       }
 
-      const formattedFoodoraOrder =
-        await this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
-
-      if (formattedFoodoraOrder.status === OrderStatusEnum.PENDING) {
-        await this.foodoraWebhookService.handleNewFoodoraOrder(formattedFoodoraOrder, business);
-        return 'New order processed';
-      }
+      return 'New order processed';
     } catch (error) {
       console.log('Error', JSON.stringify(error));
       this.errorHandlingService.handleError(error, 'foodoraOrderNotification');

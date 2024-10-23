@@ -6,9 +6,10 @@ import { UtilsModule } from 'src/utils/utils.module';
 import { ZapierModule } from 'src/zapier/zapier.module';
 import { WebhookController } from './webhook.controller.';
 import { WebhookService } from './webhook.service';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
-  imports: [BusinessModule, UtilsModule, ZapierModule, SocketModule, ProviderModule],
+  imports: [BusinessModule, UtilsModule, ZapierModule, SocketModule, ProviderModule, PrismaModule],
   controllers: [WebhookController],
   providers: [WebhookService],
   exports: [WebhookService],
