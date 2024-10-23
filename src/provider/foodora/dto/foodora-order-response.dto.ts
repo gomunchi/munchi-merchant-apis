@@ -1,43 +1,10 @@
-export interface FoodoraOrder {
-  token?: string;
-  code?: string;
-  comments?: {
-    customerComment?: string;
-    vendorComment?: string;
-  };
-  createdAt?: string;
-  customer?: FoodoraCustomer;
-  delivery?: FoodoraDelivery;
-  discounts?: FoodoraDiscount[];
-  expeditionType?: FoodoraExpeditionType;
-  expiryDate?: string;
-  extraParameters?: FoodoraExtraParameters;
-  localInfo?: FoodoraLocalInfo;
-  payment?: FoodoraPayment;
-  test?: boolean;
-  shortCode?: string;
-  preOrder?: boolean;
-  pickup?: FoodoraPickUp;
-  platformRestaurant?: FoodoraPlatformRestaurant;
-  price?: FoodoraPrice;
-  products?: FoodoraProduct[];
-  corporateOrder?: boolean;
-  corporateTaxId?: string;
-  integrationInfo?: Record<string, any>;
-  mobileOrder?: boolean;
-  webOrder?: boolean;
-  vouchers?: any[];
-  callbackUrls?: FoodoraCallbackUrls;
-  status?: string;
-  reason?: any;
-  req?: any;
-}
-
+// Enums
 export enum FoodoraExpeditionType {
   PickUp = 'pickup',
   Delivery = 'delivery',
 }
 
+// Base interfaces
 export interface FoodoraCustomer {
   email?: string;
   firstName?: string;
@@ -47,6 +14,13 @@ export interface FoodoraCustomer {
   id?: string;
   mobilePhoneCountryCode?: string;
   flags?: string[];
+}
+
+export interface FoodoraAddress {
+  postcode?: number;
+  city?: string;
+  street?: string;
+  number?: number;
 }
 
 export interface FoodoraDelivery {
@@ -63,11 +37,9 @@ export interface FoodoraPickUp {
   pickupCode: string;
 }
 
-export interface FoodoraAddress {
-  postcode?: number;
-  city?: string;
-  street?: string;
-  number?: number;
+export interface FoodoraSponsorship {
+  sponsor?: string;
+  amount?: string;
 }
 
 export interface FoodoraDiscount {
@@ -75,11 +47,6 @@ export interface FoodoraDiscount {
   amount?: string;
   type?: string;
   sponsorships?: FoodoraSponsorship[];
-}
-
-export interface FoodoraSponsorship {
-  sponsor?: string;
-  amount?: string;
 }
 
 export interface FoodoraExtraParameters {
@@ -115,6 +82,11 @@ export interface FoodoraPlatformRestaurant {
   id?: string;
 }
 
+export interface FoodoraDeliveryFee {
+  name?: string;
+  value?: number;
+}
+
 export interface FoodoraPrice {
   deliveryFees?: FoodoraDeliveryFee[];
   grandTotal?: string;
@@ -139,9 +111,19 @@ export interface FoodoraPrice {
   vatPercent?: string;
 }
 
-export interface FoodoraDeliveryFee {
+export interface FoodoraSelectedTopping {
+  children?: any[];
   name?: string;
-  value?: number;
+  price?: string;
+  quantity?: number;
+  id?: string;
+  remoteCode?: string;
+  type?: string;
+  discounts?: FoodoraDiscount[];
+}
+
+export interface FoodoraVariation {
+  name?: string;
 }
 
 export interface FoodoraProduct {
@@ -163,24 +145,57 @@ export interface FoodoraProduct {
   discounts?: FoodoraDiscount[];
 }
 
-export interface FoodoraSelectedTopping {
-  children?: any[];
-  name?: string;
-  price?: string;
-  quantity?: number;
-  id?: string;
-  remoteCode?: string;
-  type?: string;
-  discounts?: FoodoraDiscount[];
-}
-
-export interface FoodoraVariation {
-  name?: string;
-}
-
 export interface FoodoraCallbackUrls {
   orderAcceptedUrl?: string;
   orderRejectedUrl?: string;
   orderPickedUpUrl?: string;
   orderPreparedUrl?: string;
+}
+
+// Main interfaces
+export interface BaseFoodoraOrder {
+  token?: string;
+  code?: string;
+  shortCode?: string;
+  preOrder?: boolean;
+  expiryDate?: string;
+  createdAt?: string;
+  localInfo?: FoodoraLocalInfo;
+  platformRestaurant?: FoodoraPlatformRestaurant;
+  customer?: FoodoraCustomer;
+  payment?: FoodoraPayment;
+  expeditionType?: FoodoraExpeditionType;
+  products?: FoodoraProduct[];
+  corporateTaxId?: string;
+  comments?: {
+    customerComment?: string;
+    vendorComment?: string;
+  };
+  vouchers?: any[];
+  discounts?: FoodoraDiscount[];
+  price?: FoodoraPrice;
+  webOrder?: boolean;
+  mobileOrder?: boolean;
+  corporateOrder?: boolean;
+  integrationInfo?: Record<string, any>;
+  test?: boolean;
+  delivery?: FoodoraDelivery;
+  pickup?: FoodoraPickUp;
+  extraParameters?: FoodoraExtraParameters;
+}
+
+// Main export interface that matches your original structure
+export interface FoodoraOrder extends BaseFoodoraOrder {
+  status?: string;
+  reason?: any;
+}
+
+// Optional: If you need to specifically type the webhook response
+export interface FoodoraWebhook extends BaseFoodoraOrder {
+  callbackUrls: FoodoraCallbackUrls; // Made required for webhook
+}
+
+// Optional: If you need to specifically type the order response
+export interface FoodoraOrderResponse {
+  order: FoodoraOrder;
 }
