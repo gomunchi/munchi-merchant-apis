@@ -188,6 +188,7 @@ export interface BaseFoodoraOrder {
 export interface FoodoraOrder extends BaseFoodoraOrder {
   status?: string;
   reason?: any;
+  callbackUrls?: FoodoraCallbackUrls;
 }
 
 // Optional: If you need to specifically type the webhook response

@@ -25,6 +25,27 @@ export interface AvailabilityStatusResponse {
   platformType?: string;
 }
 
+export type TokenType = 'order' | 'vendor';
+
+export interface TokenConfig {
+  separator: string;
+  expectedParts: number;
+  idPosition: number;
+}
+
+export const TOKEN_CONFIGS: Record<TokenType, TokenConfig> = {
+  order: {
+    separator: '-_-',
+    expectedParts: 3,
+    idPosition: 1,
+  },
+  vendor: {
+    separator: '-',
+    expectedParts: 2,
+    idPosition: 1,
+  },
+};
+
 export const FoodoraOrderPrismaSelectArgs = Prisma.validator<Prisma.OrderInclude>()({
   business: {
     select: {
