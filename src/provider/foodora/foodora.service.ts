@@ -288,29 +288,61 @@ export class FoodoraService implements ProviderService {
   }
 
   async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
-    return this.retryOperation(async () => {
-      const accessToken = await this.foodoraLogin();
+    const accessToken = await this.foodoraLogin();
 
-      try {
-        const response = await axios.get(
-          `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
+    try {
+      const response = await axios.get(
+        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
           },
-        );
+        },
+      );
 
-        return response.data.order;
-      } catch (error) {
-        this.logger.error('Error getOrderDetails', {
-          orderId,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        throw error; // Rethrow to be handled by retry mechanism
+      return response.data.order;
+    } catch (error) {
+      this.logger.error('Error getOrderDetails', {
+        orderId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error; // Rethrow to be handled by retry mechanism
+    }
+  }
+
+  extractOrderId(token: string): string {
+    try {
+      this.logger.debug(`Attempting to extract order ID from token: ${this.maskToken(token)}`);
+
+      if (!token) {
+        this.logger.error('Token is empty or undefined');
+        throw new Error('Token is required');
       }
-    });
+
+      const parts = token.split('-_-');
+
+      if (parts.length !== 3) {
+        this.logger.error(`Invalid token format. Expected 3 parts, got ${parts.length}`);
+        throw new Error('Invalid Foodora token format');
+      }
+
+      const orderId = parts[1];
+      this.logger.debug(`Successfully extracted order ID: ${orderId}`);
+
+      return orderId;
+    } catch (error) {
+      this.logger.error(`Failed to extract order ID: ${JSON.stringify(error)}`);
+      throw error;
+    }
+  }
+
+  // Helper method to mask sensitive data in logs
+  private maskToken(token: string): string {
+    if (!token) return 'undefined';
+    if (token.length <= 8) return '***';
+
+    return `${token.slice(0, 4)}...${token.slice(-4)}`;
   }
 
   async submitCatalog(catalogImportDto: any): Promise<void> {
