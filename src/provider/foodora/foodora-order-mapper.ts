@@ -39,9 +39,11 @@ export class FoodoraOrderMapperService {
   }
 
   public async mapFoodoraOrderToOrderResponse(foodoraOrder: FoodoraOrder): Promise<OrderResponse> {
-    const businessData = await this.validateBusinessByVenueId(
-      `FI${foodoraOrder.platformRestaurant.id}`,
-    );
+    const foodoraVendorId = foodoraOrder.callbackUrls
+      ? foodoraOrder.platformRestaurant.id
+      : `FI${foodoraOrder.platformRestaurant.id}`;
+
+    const businessData = await this.validateBusinessByVenueId(foodoraVendorId);
 
     let deliveryType: number = OrderingDeliveryType.PickUp;
 
