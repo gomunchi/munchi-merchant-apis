@@ -433,7 +433,7 @@ export class WoltService implements ProviderService {
   }
 
   @OnEvent('Wolt.venueStatus')
-  async setWoltVenueStatus(woltVenueId: string, status: boolean, time?: Date) {
+  async setWoltVenueStatus(_: any, woltVenueId: string, status: boolean, time?: Date) {
     this.logger.log(
       `Setting Wolt venue status - Venue ID: ${woltVenueId}, Status: ${status}, Time: ${
         time || 'N/A'
