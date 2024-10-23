@@ -9,18 +9,20 @@ import { OrderingDeliveryType } from '../ordering/ordering.type';
 import { ProviderService } from '../provider.service';
 import { ProviderEnum } from '../provider.type';
 
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import moment from 'moment';
-import { AvailableOrderStatus, OrderResponse, OrderStatusEnum } from 'src/order/dto/order.dto';
+import { AvailableOrderStatus, OrderStatusEnum } from 'src/order/dto/order.dto';
 import { OrderingMenuMapperService } from '../ordering/ordering-menu-mapper';
 import { FoodoraOrder } from './dto/foodora-order-response.dto';
-import { GetOrdersIdsResponse, UpdateFoodoraOrderStatusDto } from './dto/foodora-order.dto';
+import { UpdateFoodoraOrderStatusDto } from './dto/foodora-order.dto';
 import {
   AvailabilityStatusResponse,
   CloseRestaurantDto,
   FoodoraOrderPrismaSelectArgs,
+  TOKEN_CONFIGS,
+  TokenType,
 } from './dto/foodora-restaurant-availability.dto';
-import { FoodoraOrderStatus, PosAvailabilityState } from './dto/foodora.enum.dto';
+import { FoodoraOrderStatus, PosAvailabilityState, PosClosingReason } from './dto/foodora.enum.dto';
 import { MunchiMenu } from './dto/munchi-menu.dto';
 import { FoodoraMenuMapperService } from './foodora-menu-mapper';
 import { FoodoraOrderMapperService } from './foodora-order-mapper';
@@ -63,14 +65,22 @@ export class FoodoraService implements ProviderService {
     this.foodoraSecret = this.configService.get('FOODORA_AUTH_SECRET');
   }
 
-  async foodoraLogin(): Promise<string> {
+  async foodoraLogin({
+    grant_type,
+    password,
+    username,
+  }: {
+    username: string;
+    password: string;
+    grant_type: string;
+  }): Promise<string> {
     try {
       const response = await axios.post(
         `${this.foodoraApiUrl}/v2/login`,
         new URLSearchParams({
-          username: this.foodoraUsername,
-          password: this.foodoraPassword,
-          grant_type: 'client_credentials',
+          username: username,
+          password: password,
+          grant_type: grant_type,
         }),
         {
           headers: {
@@ -87,57 +97,68 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async updateFoodoraOrderStatus(orderId: string, dto: UpdateFoodoraOrderStatusDto): Promise<void> {
-    const accessToken = await this.foodoraLogin();
+  async updateFoodoraOrderStatus(
+    foodoraToken: string,
+    orderId: string,
+    dto: UpdateFoodoraOrderStatusDto,
+  ): Promise<void> {
     try {
       const response = await axios.post(`${this.foodoraApiUrl}/v2/order/status/${orderId}`, dto, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${foodoraToken}`,
           'Content-Type': 'application/json',
         },
       });
 
-      this.logger.log(`Update order status for order ${orderId}: ${response.data}`);
+      this.logger.log(`Update order status for order ${orderId}: ${JSON.stringify(response.data)}`);
     } catch (error) {
       this.logger.error(`Error updating Foodora order status ${orderId}`, error);
       throw new HttpException('Failed to update Foodora order status', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async markFoodoraOrderAsPrepared(orderId: string): Promise<void> {
-    const accessToken = await this.foodoraLogin();
-
+  async markFoodoraOrderAsPrepared(foodoraToken: string, orderId: string): Promise<void> {
     const options: AxiosRequestConfig = {
       url: `${this.foodoraApiUrl}/v2/orders/${orderId}/preparation-completed`,
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${foodoraToken}`,
       },
     };
 
     try {
       const response = await axios.request(options);
-      this.logger.log(`Update order as preprared for order ${orderId}: ${response.data}`);
+      this.logger.log(
+        `Update order as preprared for order ${orderId}: ${JSON.stringify(response.data)}`,
+      );
     } catch (error) {
       this.logger.error(`Error markFoodoraOrderAsPrepared: ${JSON.stringify(error)}`);
       throw new HttpException('Failed to mark Foodora order as prepared', HttpStatus.BAD_REQUEST);
     }
   }
 
-  async getFoodoraAvailabilityStatus(posVendorId: string): Promise<AvailabilityStatusResponse> {
-    const accessToken = await this.foodoraLogin();
+  async getFoodoraAvailabilityStatus(
+    foodoraToken: string,
+    orderingBusiessId: string,
+    posVendorId: string,
+  ): Promise<AvailabilityStatusResponse> {
+    const extractedPosVendorId = this.extractId(posVendorId, 'vendor');
 
+    const options: AxiosRequestConfig = {
+      url: `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${orderingBusiessId}/availability`,
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${foodoraToken}`,
+      },
+    };
     try {
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
+      const response = await axios.request(options);
+
+      const vendorAvailability: AvailabilityStatusResponse = response.data.find(
+        (data: AvailabilityStatusResponse) => data.platformRestaurantId === extractedPosVendorId,
       );
 
-      return response.data;
+      return vendorAvailability;
     } catch (error) {
       this.logger.error(
         `Error getting Foodora availability status for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
@@ -147,159 +168,134 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async openFoodoraRestaurant(posVendorId: string): Promise<void> {
-    const accessToken = await this.foodoraLogin();
-    const { platformKey, platformRestaurantId } = await this.getFoodoraAvailabilityStatus(
-      posVendorId,
-    ).then((res) => res[0]);
+  async getFoodoraCredentials(
+    posVendorId: string,
+    type: 'Order' | 'Menu',
+  ): Promise<{
+    username: string;
+    password: string;
+    grant_type: string;
+  } | null> {
+    const providerFindUniqueArgs = Prisma.validator<Prisma.ProviderFindUniqueArgs>()({
+      where: {
+        id: posVendorId,
+      },
+      include: {
+        credentials: true,
+      },
+    });
 
-    try {
-      await axios.put(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
-        {
-          availabilityState: PosAvailabilityState.OPEN,
-          platformKey,
-          platformRestaurantId,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error opening Foodora restaurant for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
-        error,
-      );
-      throw new HttpException('Failed to open Foodora restaurant', HttpStatus.BAD_REQUEST);
-    }
+    const posVendor = await this.prismaService.provider.findUnique(providerFindUniqueArgs);
+
+    const credentials = posVendor.credentials.find((cred) => cred.name === type);
+
+    if (!credentials) return null;
+    return credentials.data as any;
   }
 
-  async closeFoodoraRestaurant(posVendorId: string, data: CloseRestaurantDto): Promise<void> {
-    const accessToken = await this.foodoraLogin();
-    const { platformKey, platformRestaurantId } = await this.getFoodoraAvailabilityStatus(
-      posVendorId,
-    ).then((res) => res[0]);
-
-    try {
-      await axios.put(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${posVendorId}/availability`,
-        {
-          ...data,
-          platformKey,
-          platformRestaurantId,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error closing Foodora restaurant for ${process.env.MUNCHI_CHAINCODE}/${posVendorId}`,
-        error,
-      );
-      throw new HttpException('Failed to close Foodora restaurant', HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  async getOrdersIds(
-    status: 'cancelled' | 'accepted',
-    pastNumberOfHours = 24,
-    vendorId?: string,
-  ): Promise<GetOrdersIdsResponse> {
-    const accessToken = await this.foodoraLogin();
-
-    try {
-      const queryParams = new URLSearchParams({
-        status,
-        pastNumberOfHours: pastNumberOfHours.toString(),
-      });
-
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${
-          process.env.MUNCHI_CHAINCODE
-        }/orders/ids?${queryParams.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
-
-      return response.data;
-    } catch (error) {
-      console.log('Error', JSON.stringify(error));
-    }
-  }
-
-  private async retryOperation<T>(
-    operation: () => Promise<T>,
-    config: RetryConfig = this.defaultRetryConfig,
-  ): Promise<T> {
-    let lastError: Error;
-    let delay = config.initialDelayMs;
-
-    for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error as Error;
-
-        if (!this.isRetryableError(error)) {
-          throw error;
-        }
-
-        if (attempt === config.maxRetries) {
-          break;
-        }
-
-        this.logger.warn(`Attempt ${attempt} failed for operation. Retrying in ${delay}ms...`, {
-          error: lastError.message,
-          attempt,
-          delay,
-        });
-
-        await sleep(delay);
-        delay = Math.min(delay * config.backoffFactor, config.maxDelayMs);
-      }
-    }
-
-    throw new Error(
-      `Operation failed after ${config.maxRetries} attempts. Last error: ${lastError.message}`,
+  @OnEvent('Foodora.venueStatus')
+  async setFoodoraVendorStatus(
+    orderingBusinessId: string,
+    posVendorId: string,
+    status: boolean,
+    duration?: number,
+  ): Promise<void> {
+    this.logger.log(
+      `Setting Foodora venue status - Venue ID: ${posVendorId}, Status: ${status}, Time in minutes: ${
+        duration || 'N/A'
+      }`,
     );
-  }
 
-  private isRetryableError(error: unknown): boolean {
-    if (axios.isAxiosError(error)) {
-      const statusCode = error.response?.status;
-      console.log('🚀 ~ FoodoraService ~ isRetryableError ~ statusCode:', statusCode);
+    // Get Foodora credentials
+    const foodoraCredentials = await this.getFoodoraCredentials(posVendorId, 'Order');
 
-      // Retry on network errors or specific HTTP status codes
-      return (
-        !statusCode || // Network error
-        statusCode === 408 || // Request Timeout
-        statusCode === 429 || // Too Many Requests
-        statusCode >= 500
-      ); // Server errors
+    // Login to Foodora system
+    const foodoraToken = await this.foodoraLogin(foodoraCredentials);
+
+    const { platformKey, platformRestaurantId } = await this.getFoodoraAvailabilityStatus(
+      foodoraToken,
+      orderingBusinessId,
+      posVendorId,
+    );
+
+    const closeData: CloseRestaurantDto = {
+      availabilityState: PosAvailabilityState.CLOSED,
+      closedReason: PosClosingReason.CLOSED,
+      closingMinutes: duration,
+    };
+
+    const options: AxiosRequestConfig = {
+      method: 'PUT',
+      url: `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/remoteVendors/${orderingBusinessId}/availability`,
+      data: {
+        ...(status
+          ? {
+              availabilityState: PosAvailabilityState.OPEN,
+            }
+          : closeData),
+        platformKey,
+        platformRestaurantId,
+      },
+      headers: {
+        Authorization: `Bearer ${foodoraToken}`,
+      },
+    };
+
+    try {
+      const response = await axios.request(options);
+    } catch (error) {
+      this.logger.error(
+        `Error ${status ? 'opening' : 'closing'} Foodora restaurant for ${
+          process.env.MUNCHI_CHAINCODE
+        }/${posVendorId}`,
+        error,
+      );
+      throw new HttpException(
+        `Failed to ${status ? 'open' : 'close'} Foodora restaurant`,
+        HttpStatus.BAD_REQUEST,
+      );
     }
-
-    return false;
   }
 
-  async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
-    const accessToken = await this.foodoraLogin();
+  // async getOrdersIds(
+  //   status: 'cancelled' | 'accepted',
+  //   pastNumberOfHours = 24,
+  //   vendorId?: string,
+  // ): Promise<GetOrdersIdsResponse> {
+  //   const accessToken = await this.foodoraLogin();
 
+  //   try {
+  //     const queryParams = new URLSearchParams({
+  //       status,
+  //       pastNumberOfHours: pastNumberOfHours.toString(),
+  //     });
+
+  //     const response = await axios.get(
+  //       `${this.foodoraApiUrl}/v2/chains/${
+  //         process.env.MUNCHI_CHAINCODE
+  //       }/orders/ids?${queryParams.toString()}`,
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${accessToken}`,
+  //         },
+  //       },
+  //     );
+
+  //     return response.data;
+  //   } catch (error) {
+  //     console.log('Error', JSON.stringify(error));
+  //   }
+  // }
+
+  async getOrderDetails(foodoraToken: string, orderId: string): Promise<FoodoraOrder> {
     const options: AxiosRequestConfig = {
       url: `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${foodoraToken}`,
       },
     };
-    console.log('get order detail options: ', JSON.stringify(options));
+
     try {
       const response = await axios.request(options);
 
@@ -314,50 +310,49 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  extractOrderId(token: string): string {
+  private extractId(token: string, type: TokenType): string {
     try {
-      this.logger.debug(`Attempting to extract order ID from token: ${this.maskToken(token)}`);
+      this.logger.debug(`Attempting to extract ${type} ID from token: ${this.maskToken(token)}`);
 
       if (!token) {
         this.logger.error('Token is empty or undefined');
         throw new Error('Token is required');
       }
 
-      const parts = token.split('-_-');
+      const config = TOKEN_CONFIGS[type];
+      const parts = token.split(config.separator);
 
-      if (parts.length !== 3) {
-        this.logger.error(`Invalid token format. Expected 3 parts, got ${parts.length}`);
-        throw new Error('Invalid Foodora token format');
+      if (parts.length !== config.expectedParts) {
+        this.logger.error(
+          `Invalid ${type} token format. Expected ${config.expectedParts} parts, got ${parts.length}`,
+        );
+        throw new Error(`Invalid Foodora ${type} token format`);
       }
 
-      const orderId = parts[1];
-      this.logger.debug(`Successfully extracted order ID: ${orderId}`);
+      const extractedId = parts[config.idPosition];
+      this.logger.debug(`Successfully extracted ${type} ID: ${extractedId}`);
 
-      return orderId;
+      return extractedId;
     } catch (error) {
-      this.logger.error(`Failed to extract order ID: ${JSON.stringify(error)}`);
+      this.logger.error(`Failed to extract ${type} ID: ${JSON.stringify(error)}`);
       throw error;
     }
   }
 
-  // Helper method to mask sensitive data in logs
   private maskToken(token: string): string {
     if (!token) return 'undefined';
     if (token.length <= 8) return '***';
-
     return `${token.slice(0, 4)}...${token.slice(-4)}`;
   }
 
-  async submitCatalog(catalogImportDto: any): Promise<void> {
-    const accessToken = await this.foodoraLogin();
-
+  async submitCatalog(foodoraToken: string, catalogImportDto: any): Promise<void> {
     try {
       const response = await axios.put(
         `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/catalog`,
         catalogImportDto,
         {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${foodoraToken}`,
             'Content-Type': 'application/json',
           },
         },
@@ -373,15 +368,13 @@ export class FoodoraService implements ProviderService {
     }
   }
 
-  async getCatalogLogs(chainCode: string, vendorId: number): Promise<void> {
-    const accessToken = await this.foodoraLogin();
-
+  async getCatalogLogs(foodoraToken: string, chainCode: string, vendorId: number): Promise<void> {
     try {
       const response = await axios.get(
         `${this.foodoraApiUrl}/v2/chains/${chainCode}/vendors/${vendorId}/menu-import-logs?limit=5`,
         {
           headers: {
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${foodoraToken}`,
           },
         },
       );
@@ -428,32 +421,6 @@ export class FoodoraService implements ProviderService {
     return transformedOrder;
   }
 
-  async getOrderFromFoodoraByStatus(
-    accessToken: string,
-    status: AvailableOrderStatus[],
-    businessIds: string[],
-  ): Promise<OrderResponse[]> {
-    let orderIds = [];
-    if (status.includes(OrderStatusEnum.IN_PROGRESS)) {
-      const acceptedOrders = await this.getOrdersIds('accepted');
-      orderIds = acceptedOrders.orders;
-    } else if (status.includes(OrderStatusEnum.REJECTED)) {
-      const cancelledOrders: any = await this.getOrdersIds('cancelled');
-      orderIds = cancelledOrders.orders;
-    } else {
-      throw new BadRequestException('Foodora does not support this order status');
-    }
-
-    const orders = await Promise.all(
-      orderIds.map(async (orderId) => {
-        const order = await this.getOrderDetails(orderId);
-        return this.foodoraOrderMapperService.mapFoodoraOrderToOrderResponse(order);
-      }),
-    );
-
-    return orders;
-  }
-
   async getOrderByStatus(
     _,
     status: AvailableOrderStatus[],
@@ -482,6 +449,14 @@ export class FoodoraService implements ProviderService {
     orderData: Omit<OrderData, 'provider'>,
     providerInfo?: Provider,
   ): Promise<any> {
+    const vendorId = providerInfo.id;
+
+    // Get Foodora credentials
+    const foodoraCredentials = await this.getFoodoraCredentials(vendorId, 'Order');
+
+    // Login to Foodora system
+    const foodoraToken = await this.foodoraLogin(foodoraCredentials);
+
     let status: AvailableOrderStatus = orderData.orderStatus;
 
     try {
@@ -496,7 +471,7 @@ export class FoodoraService implements ProviderService {
         : new Date().toISOString();
 
       // Handle status updates using a more maintainable switch statement
-      await this.handleStatusUpdate(order, orderData.orderStatus, preparationTime);
+      await this.handleStatusUpdate(foodoraToken, order, orderData.orderStatus, preparationTime);
 
       if (
         order.deliveryType === OrderingDeliveryType.PickUp &&
@@ -550,13 +525,14 @@ export class FoodoraService implements ProviderService {
   }
 
   private async handleStatusUpdate(
+    foodoraToken: string,
     order: any,
     newStatus: OrderStatusEnum,
     preparationTime: string,
   ): Promise<void> {
     switch (newStatus) {
       case OrderStatusEnum.IN_PROGRESS:
-        await this.updateFoodoraOrderStatus(order.orderId, {
+        await this.updateFoodoraOrderStatus(foodoraToken, order.orderId, {
           acceptanceTime: preparationTime,
           remoteOrderId: order.orderId.split('-_-')[1],
           status: FoodoraOrderStatus.Accepted,
@@ -565,13 +541,13 @@ export class FoodoraService implements ProviderService {
 
       case OrderStatusEnum.COMPLETED:
         if (order.deliveryType === OrderingDeliveryType.Delivery) {
-          await this.markFoodoraOrderAsPrepared(order.orderId);
+          await this.markFoodoraOrderAsPrepared(foodoraToken, order.orderId);
         }
         break;
 
       case OrderStatusEnum.DELIVERED:
         if (order.deliveryType === OrderingDeliveryType.PickUp) {
-          await this.updateFoodoraOrderStatus(order.orderId, {
+          await this.updateFoodoraOrderStatus(foodoraToken, order.orderId, {
             status: FoodoraOrderStatus.PickedUp,
           });
         }
@@ -585,14 +561,22 @@ export class FoodoraService implements ProviderService {
     orderRejectData: { reason: string },
     providerInfo?: Provider,
   ): Promise<any> {
+    const vendorId = providerInfo.id;
+
     const existingOrder = await this.prismaService.order.findUnique({
       where: {
         id: Number(orderId),
       },
     });
 
+    // Get Foodora credentials
+    const foodoraCredentials = await this.getFoodoraCredentials(vendorId, 'Order');
+
+    // Login to Foodora system
+    const foodoraToken = await this.foodoraLogin(foodoraCredentials);
+
     try {
-      await this.updateFoodoraOrderStatus(existingOrder.orderId, {
+      await this.updateFoodoraOrderStatus(foodoraToken, existingOrder.orderId, {
         status: FoodoraOrderStatus.Rejected,
         reason: orderRejectData.reason,
       });
@@ -636,7 +620,7 @@ export class FoodoraService implements ProviderService {
 
     const mappedMenu = await this.foodoraMenuMapperService.mapMenuToCatalogImportDto(munchiMenu);
 
-    const result = await this.submitCatalog(mappedMenu);
+    const result = await this.submitCatalog('', mappedMenu);
     return mappedMenu;
   }
 }
