@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ErrorHandlingService } from 'src/error-handling/error-handling.service';
 import { OrderStatusEnum } from 'src/order/dto/order.dto';
-import { FoodoraOrder } from 'src/provider/foodora/dto/foodora-order-response.dto';
+import { FoodoraOrder, FoodoraWebhook } from 'src/provider/foodora/dto/foodora-order-response.dto';
 import { FoodoraOrderMapperService } from 'src/provider/foodora/foodora-order-mapper';
 import { FoodoraWebhookService } from 'src/provider/foodora/foodora-webhook.service';
 import { FoodoraService } from 'src/provider/foodora/foodora.service';
@@ -213,8 +213,8 @@ export class WebhookService {
     this.socketService.notifyCheckBusinessStatus(businessPublicId);
   }
 
-  public async processFoodoraOrder(foodoraWebhookdata: any, remoteId: string) {
-    const orderId = foodoraWebhookdata.token.split('-_-')[1];
+  public async processFoodoraOrder(foodoraWebhookdata: FoodoraWebhook, remoteId: string) {
+    const orderId = this.foodoraService.extractOrderId(foodoraWebhookdata.token);
     const order: FoodoraOrder = await this.foodoraService.getOrderDetails(orderId);
     this.logger.log(`new Foodora order: ${JSON.stringify(order)}`);
     const business = await this.businessService.findBusinessByWoltVenueId(
@@ -225,7 +225,7 @@ export class WebhookService {
   }
 
   async foodoraOrderNotification(
-    foodoraWebhookdata: any,
+    foodoraWebhookdata: FoodoraWebhook,
     request: any,
     remoteId: string,
   ): Promise<string> {
