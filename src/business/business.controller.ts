@@ -21,7 +21,7 @@ import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { SessionService } from 'src/auth/session.service';
 import { BusinessService } from './business.service';
 import { BusinessDto, SetOnlineStatusDto } from './dto/business.dto';
-import { ProviderDto } from './validation';
+import { UnifiedProviderSetupDto } from './validation';
 
 @Controller('business')
 @ApiBearerAuth('JWT-auth')
@@ -99,11 +99,8 @@ export class BusinessController {
   @ApiCreatedResponse({
     description: 'Add an extra business config for a specific extra business',
   })
-  @UseGuards(ApiKeyGuard)
   @Post('add-provider')
-  async setExtraConfig(@Body(new ValidationPipe()) providerBodyData: ProviderDto) {
-    const { id: businessPublicId } = providerBodyData;
-
-    return this.businessService.addBusinessProvider(businessPublicId, providerBodyData);
+  async addProvider(@Body(new ValidationPipe()) providerBodyData: UnifiedProviderSetupDto) {
+    return this.businessService.setupBusinessProvider(providerBodyData);
   }
 }

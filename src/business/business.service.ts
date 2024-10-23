@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiKey, Business, BusinessProviders, Prisma, Provider } from '@prisma/client';
+import { ApiKey, Business, BusinessProviders, Credential, Prisma, Provider } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import moment from 'moment-timezone';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -23,8 +23,11 @@ import { OrderingBusiness } from 'src/provider/ordering/ordering.type';
 import { AvailableProvider, ProviderEnum } from 'src/provider/provider.type';
 import { WoltService } from 'src/provider/wolt/wolt.service';
 import { BusinessInfoSelectBase } from './business.type';
-import { ProviderDto } from './validation';
-
+import {
+  BusinessProviderMappingDto,
+  CredentialConfigDto,
+  UnifiedProviderSetupDto,
+} from './validation';
 @Injectable()
 export class BusinessService {
   private logger = new Logger(BusinessService.name);
@@ -264,7 +267,6 @@ export class BusinessService {
     status: boolean,
     duration: number = undefined,
   ) {
-
     const user = await this.userService.getUserByPublicId(userPublicId);
 
     // Business data from ordering
@@ -349,13 +351,15 @@ export class BusinessService {
         },
       });
 
+      console.log('🚀 ~ BusinessService ~ providerInfo:', providerInfo);
       //send request to provider venue
 
       this.eventEmitter.emit(
         `${provider}.venueStatus`,
+        orderingBusiness.id.toString(),
         providerInfo.id,
         status,
-        !status ? scheduleOpenTime : null,
+        !status && providerInfo.name !== ProviderEnum.Foodora ? scheduleOpenTime : duration,
       );
 
       return {
@@ -508,63 +512,369 @@ export class BusinessService {
     });
   }
 
-  async addBusinessProvider(businessPublicId: string, data: ProviderDto) {
-    const { providerId, providerName } = data;
+  async setupBusinessProvider(data: UnifiedProviderSetupDto) {
+    const { businessProviders, providerName, credential } = data;
 
-    const business = await this.findBusinessByPublicId(businessPublicId);
-    if (!business) {
-      throw new NotFoundException("Business can't be found");
-    }
-    await this.createBusinessProvider(providerId, providerName);
+    return await this.prismaService.$transaction(async (tx: Prisma.TransactionClient) => {
+      // 1. Verify all businesses exist and get their details
+      const businessEntities = await this.verifyBusinesses(
+        businessProviders.map((bp) => bp.businessPublicId),
+        tx,
+      );
 
-    await this.createBusinessProviderCredentials(data, business);
+      // 2. Check for existing connections and separate new from existing
+      const { newConnections, existingConnections } = await this.validateAndSeparateConnections(
+        businessProviders,
+        businessEntities,
+        tx,
+      );
 
-    await this.connectBusinessProvider(providerId, business.orderingBusinessId);
+      // 3. Create or get providers for each business-provider mapping
+      const providerEntities = await this.createProviders(businessProviders, providerName, tx);
 
-    return {
-      message: 'Added provider succesfully',
-    };
-  }
+      // 4. Handle credentials if provided
+      let credentialEntity = null;
+      if (credential) {
+        credentialEntity = await this.handleCredentials(
+          credential,
+          providerEntities.map((p) => p.id),
+          providerName,
+          businessEntities[0]?.name || '',
+          tx,
+        );
+      }
 
-  async connectBusinessProvider(providerId: string, orderingBusinessId: string) {
-    return await this.prismaService.businessProviders.create({
-      data: {
-        orderingBusinessId: orderingBusinessId,
-        providerId: providerId,
-      },
+      // 5. Create new connections
+      const newConnectionResults =
+        newConnections.length > 0
+          ? await this.createConnections(
+              newConnections,
+              businessEntities,
+              providerEntities,
+              credentialEntity,
+              tx,
+            )
+          : [];
+
+      // 6. Update existing connections with new credentials if provided
+      const updatedConnectionResults =
+        existingConnections.length > 0 && credentialEntity
+          ? await this.updateExistingConnections(existingConnections, credentialEntity, tx)
+          : [];
+
+      // 7. Combine results
+      const allConnections = [...newConnectionResults, ...updatedConnectionResults];
+
+      return this.formatResponse(
+        businessEntities,
+        providerEntities,
+        credentialEntity,
+        allConnections,
+      );
     });
   }
 
-  async createBusinessProviderCredentials(data: ProviderDto, business: Business) {
-    const { credentials, providerId, providerName, credentialName, type } = data;
+  private async validateAndSeparateConnections(
+    businessProviders: BusinessProviderMappingDto[],
+    businesses: Business[],
+    tx: Prisma.TransactionClient,
+  ) {
+    const connectionStatuses = await Promise.all(
+      businessProviders.map(async (bp) => {
+        const business = businesses.find((b) => b.publicId === bp.businessPublicId);
 
-    const credentialsInputArgs = Prisma.validator<Prisma.CredentialUncheckedCreateInput>()({
-      name: credentialName,
-      providerName: providerName,
-      type: type,
-      businessName: business.name,
-      data: credentials,
-      providers: {
-        connect: {
-          id: providerId,
+        if (!business) {
+          throw new NotFoundException({
+            message: `Business with publicId ${bp.businessPublicId} not found`,
+          });
+        }
+
+        const existing = await tx.businessProviders.findFirst({
+          where: {
+            orderingBusinessId: business.orderingBusinessId,
+            providerId: bp.providerId,
+          },
+          include: {
+            provider: {
+              include: {
+                credentials: true,
+              },
+            },
+          },
+        });
+
+        return {
+          businessProvider: bp,
+          existing,
+          business,
+        };
+      }),
+    );
+
+    const newConnections: BusinessProviderMappingDto[] = [];
+    const existingConnections: Array<{
+      businessProvider: BusinessProviderMappingDto;
+      existing: any;
+      business: Business;
+    }> = [];
+
+    connectionStatuses.forEach((status) => {
+      if (status.existing) {
+        existingConnections.push(status);
+      } else {
+        newConnections.push(status.businessProvider);
+      }
+    });
+
+    return { newConnections, existingConnections };
+  }
+
+  private async handleCredentials(
+    credentialConfig: CredentialConfigDto,
+    providerIds: string[],
+    providerName: string,
+    businessName: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const { name, type, credentials, reuseExisting } = credentialConfig;
+
+    if (reuseExisting) {
+      const existing = await tx.credential.findFirst({
+        where: {
+          name,
+          type,
+        },
+        include: {
+          providers: true,
+        },
+      });
+
+      if (existing) {
+        // Even if we found existing credential, ensure it's connected to all providers
+        await tx.credential.update({
+          where: { id: existing.id },
+          data: {
+            providers: {
+              connect: {
+                id: providerIds[0],
+              },
+            },
+          },
+        });
+        return existing;
+      }
+    }
+
+    // Create new credential with explicit provider connections
+    const newCredential = await tx.credential.create({
+      data: {
+        name,
+        type,
+        data: credentials,
+        providerName,
+        businessName,
+        providers: {
+          connect: providerIds.map((id) => ({ id })),
+        },
+      },
+      include: {
+        providers: true,
+      },
+    });
+
+    // Double-check and force the connection if needed
+    if (newCredential.providers.length !== providerIds.length) {
+      await tx.credential.update({
+        where: { id: newCredential.id },
+        data: {
+          providers: {
+            connect: providerIds.map((id) => ({ id })),
+          },
+        },
+      });
+    }
+
+    return newCredential;
+  }
+
+  private async updateExistingConnections(
+    existingConnections: Array<{
+      businessProvider: BusinessProviderMappingDto;
+      existing: {
+        orderingBusinessId: string;
+        providerId: string;
+        provider: Provider;
+      };
+      business: Business;
+    }>,
+    credential: Credential,
+    tx: Prisma.TransactionClient,
+  ): Promise<
+    Array<{
+      businessPublicId: string;
+      providerId: string;
+      businessProvider: BusinessProviders;
+    }>
+  > {
+    // Get unique provider IDs to update
+    const uniqueProviderIds = [
+      ...new Set(existingConnections.map((conn) => conn.businessProvider.providerId)),
+    ];
+
+    // Update the credential's provider connections
+    await tx.credential.update({
+      where: { id: credential.id },
+      data: {
+        providers: {
+          connect: uniqueProviderIds.map((id) => ({ id })),
         },
       },
     });
 
-    return await this.prismaService.credential.create({
-      data: credentialsInputArgs,
+    // Also update from the provider side to ensure bidirectional connection
+    await Promise.all(
+      uniqueProviderIds.map(async (providerId) => {
+        await tx.provider.update({
+          where: { id: providerId },
+          data: {
+            credentials: {
+              connect: { id: credential.id },
+            },
+          },
+        });
+      }),
+    );
+
+    // Verify connections
+    const verifyProviders = await tx.provider.findMany({
+      where: { id: { in: uniqueProviderIds } },
+      include: { credentials: true },
     });
+
+    for (const provider of verifyProviders) {
+      if (!provider.credentials.some((c) => c.id === credential.id)) {
+        throw new Error(`Failed to connect credential ${credential.id} to provider ${provider.id}`);
+      }
+    }
+
+    return existingConnections.map(({ businessProvider, existing }) => ({
+      businessPublicId: businessProvider.businessPublicId,
+      providerId: businessProvider.providerId,
+      businessProvider: {
+        orderingBusinessId: existing.orderingBusinessId,
+        providerId: existing.providerId,
+      } as BusinessProviders,
+    }));
   }
 
-  async createBusinessProvider(providerId: string, providerName: string) {
-    const providerCreateInputArgs = Prisma.validator<Prisma.ProviderCreateArgs>()({
-      data: {
-        id: providerId,
-        name: providerName,
-      },
-    });
+  private async verifyBusinesses(publicIds: string[], tx: Prisma.TransactionClient) {
+    const businesses = await Promise.all(
+      publicIds.map(async (publicId) => {
+        const business = await tx.business.findUnique({
+          where: { publicId },
+        });
+        if (!business) {
+          throw new NotFoundException(`Business with ID ${publicId} not found`);
+        }
+        return business;
+      }),
+    );
+    return businesses;
+  }
 
-    return await this.prismaService.provider.create(providerCreateInputArgs);
+  private async createProviders(
+    businessProviders: BusinessProviderMappingDto[],
+    providerName: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const uniqueProviderIds = [...new Set(businessProviders.map((bp) => bp.providerId))];
+
+    return await Promise.all(
+      uniqueProviderIds.map(async (providerId) => {
+        return await tx.provider.upsert({
+          where: { id: providerId },
+          update: { name: providerName },
+          create: { id: providerId, name: providerName },
+        });
+      }),
+    );
+  }
+
+  private async createConnections(
+    businessProviders: BusinessProviderMappingDto[],
+    businesses: Business[],
+    providers: Provider[],
+    credential: Credential | null,
+    tx: Prisma.TransactionClient,
+  ) {
+    const connections = await Promise.all(
+      businessProviders.map(async (bp) => {
+        const business = businesses.find((b) => b.publicId === bp.businessPublicId);
+        if (!business) {
+          throw new NotFoundException({
+            message: `Business with publicId ${bp.businessPublicId} not found`,
+          });
+        }
+
+        const provider = providers.find((p) => p.id === bp.providerId);
+        if (!provider) {
+          throw new NotFoundException({
+            message: `Provider with id ${bp.providerId} not found`,
+          });
+        }
+
+        // Connect business to provider
+        const businessProvider = await tx.businessProviders.create({
+          data: {
+            orderingBusinessId: business.orderingBusinessId,
+            providerId: provider.id,
+          },
+        });
+
+        return {
+          businessPublicId: bp.businessPublicId,
+          providerId: bp.providerId,
+          businessProvider,
+        };
+      }),
+    );
+
+    return connections;
+  }
+
+  private formatResponse(
+    businesses: Business[],
+    providers: Provider[],
+    credential: Credential | null,
+    connections: Array<{
+      businessPublicId: string;
+      providerId: string;
+      businessProvider: BusinessProviders;
+    }>,
+  ) {
+    return {
+      message: 'Provider setup completed successfully',
+      details: {
+        connections: connections.map((conn) => ({
+          business: {
+            publicId: conn.businessPublicId,
+            name: businesses.find((b) => b.publicId === conn.businessPublicId)?.name,
+          },
+          provider: {
+            id: conn.providerId,
+            name: providers.find((p) => p.id === conn.providerId)?.name,
+          },
+        })),
+        credential: credential
+          ? {
+              id: credential.id,
+              name: credential.name,
+              type: credential.type,
+            }
+          : null,
+        totalConnections: connections.length,
+      },
+    };
   }
 
   async saveMultipleBusinessToDb(businesses: BusinessDto[]) {
