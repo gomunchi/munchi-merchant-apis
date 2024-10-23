@@ -15,20 +15,20 @@ export class ProviderRepositoryService {
     private prismaService: PrismaService,
   ) {}
 
-  @OnEvent('database.notifyChanges')
-  async notifiyDatabaseChange(provider: AvailableProvider, orderId: string, businessId: string) {
-    if (provider === ProviderEnum.Foodora) {
-      this.logger.log('Start synchronize process for Foodora');
+  // @OnEvent('database.notifyChanges')
+  // async notifiyDatabaseChange(provider: AvailableProvider, orderId: string, businessId: string) {
+  //   if (provider === ProviderEnum.Foodora) {
+  //     this.logger.log('Start synchronize process for Foodora');
 
-      const order = await this.foodoraService.getOrderDetails(orderId);
+  //     const order = await this.foodoraService.getOrderDetails(orderId);
 
-      const formattedOrder = await this.foodoraOrderMapper.mapFoodoraOrderToOrderResponse(order);
+  //     const formattedOrder = await this.foodoraOrderMapper.mapFoodoraOrderToOrderResponse(order);
 
-      await this.syncProviderOrder(formattedOrder);
-    }
+  //     await this.syncProviderOrder(formattedOrder);
+  //   }
 
-    return;
-  }
+  //   return;
+  // }
 
   /**
    * Synchronizes order data from the Wolt server and updates our local database.
