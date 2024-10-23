@@ -264,7 +264,6 @@ export class BusinessService {
     status: boolean,
     duration: number = undefined,
   ) {
-    console.log('🚀 ~ BusinessService ~ duration:', duration);
 
     const user = await this.userService.getUserByPublicId(userPublicId);
 
@@ -349,7 +348,6 @@ export class BusinessService {
           open: status,
         },
       });
-      console.log('🚀 ~ BusinessService ~ scheduleOpenTime line 320:', scheduleOpenTime);
 
       //send request to provider venue
 

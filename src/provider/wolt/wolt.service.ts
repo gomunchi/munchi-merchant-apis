@@ -684,7 +684,6 @@ export class WoltService implements ProviderService {
   }
 
   async menuApiCallBack(woltVenueId: string, state: 'success' | 'cooldown') {
-    console.log('Executing callback process');
     const business = await this.prismaService.businessProviders.findUnique({
       where: {
         providerId: woltVenueId,

@@ -1,15 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SocketService } from 'src/socket/socket.service';
-import { OrderResponse } from 'src/order/dto/order.dto';
-import { FoodoraService } from './foodora.service';
 import { WoltRepositoryService } from '../wolt/wolt-repository';
 
 @Injectable()
 export class FoodoraWebhookService {
   private readonly logger = new Logger(FoodoraWebhookService.name);
   constructor(
-    private foodoraService: FoodoraService,
     private providerRepositoryService: WoltRepositoryService,
     private eventEmitter: EventEmitter2,
     private socketService: SocketService,
@@ -29,10 +26,10 @@ export class FoodoraWebhookService {
     });
 
     if (askResult.received) {
-      this.logger.log(`New Wolt order registered and acknowledged: ${askResult.message}`);
+      this.logger.log(`New Foodora order registered and acknowledged: ${askResult.message}`);
     } else {
       this.logger.warn(
-        `No acknowledgement received for new Wolt order ${formattedWoltOrder.orderNumber}`,
+        `No acknowledgement received for new Foodora order ${formattedWoltOrder.orderNumber}`,
       );
     }
     this.eventEmitter.emit(

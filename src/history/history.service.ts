@@ -138,7 +138,6 @@ export class HistoryService {
           orderingBusinessId,
           businessIncludeArgs,
         );
-        console.log('🚀 ~ HistoryService ~ orderingBusinessIds.map ~ business:', business);
 
         //Initialize the business response with initial data
         const businessObj = {

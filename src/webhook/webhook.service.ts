@@ -67,7 +67,6 @@ export class WebhookService {
       const formattedOrder = await this.orderingOrderMapperService.mapOrderToOrderResponse(
         newOrder,
       );
-      console.log('🚀 formattedOrder:', JSON.stringify(formattedOrder));
 
       this.logger.log(
         `Processing new format order notification for order  ${JSON.stringify(formattedOrder)}`,

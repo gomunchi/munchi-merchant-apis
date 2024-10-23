@@ -96,7 +96,8 @@ export class FoodoraService implements ProviderService {
           'Content-Type': 'application/json',
         },
       });
-      console.log('🚀 ~ FoodoraService ~ updateFoodoraOrderStatus ~ response:', response);
+
+      this.logger.log(`Update order status for order ${orderId}: ${response.data}`);
     } catch (error) {
       this.logger.error(`Error updating Foodora order status ${orderId}`, error);
       throw new HttpException('Failed to update Foodora order status', HttpStatus.BAD_REQUEST);
@@ -115,7 +116,8 @@ export class FoodoraService implements ProviderService {
     };
 
     try {
-      await axios.request(options);
+      const response = await axios.request(options);
+      this.logger.log(`Update order as preprared for order ${orderId}: ${response.data}`);
     } catch (error) {
       this.logger.error(`Error markFoodoraOrderAsPrepared: ${JSON.stringify(error)}`);
       throw new HttpException('Failed to mark Foodora order as prepared', HttpStatus.BAD_REQUEST);
@@ -290,15 +292,16 @@ export class FoodoraService implements ProviderService {
   async getOrderDetails(orderId: string): Promise<FoodoraOrder> {
     const accessToken = await this.foodoraLogin();
 
+    const options: AxiosRequestConfig = {
+      url: `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    };
+    console.log('get order detail options: ', JSON.stringify(options));
     try {
-      const response = await axios.get(
-        `${this.foodoraApiUrl}/v2/chains/${process.env.MUNCHI_CHAINCODE}/orders/${orderId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
+      const response = await axios.request(options);
 
       return response.data.order;
     } catch (error) {
